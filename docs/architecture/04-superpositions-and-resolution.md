@@ -52,4 +52,4 @@ Resolution outputs:
 
 Suggested UX strategy:
 - keep alternates in the object model
-- materialize alternates into the filesystem only on demand (e.g. via TUI export or `cnv resolve --export`)
+- materialize alternates into the filesystem only on demand (e.g. via TUI export or `converge resolve --export`)

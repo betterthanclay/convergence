@@ -25,7 +25,7 @@ The core mental model is a tree/network that converges through multiple phases (
 
 ### 2) Vocabulary: stop overloading "commit"
 
-- `snap`: local snapshot of workspace state (no requirement that it builds/works). In v1, created explicitly via `cnv snap`.
+- `snap`: local snapshot of workspace state (no requirement that it builds/works). In v1, created explicitly via `converge snap`.
 - `publish`: submit a selected `snap` to a gate+scope as an input artifact ("complete for this phase").
 - `bundle`: the output artifact produced by a gate after it coalesces inputs.
 - `promote`: advance a bundle to the next gate.
@@ -59,9 +59,9 @@ Rationale:
 ### 6) CLI + TUI contract
 
 - Deterministic CLI commands for automation/AI/tools:
-  - `cnv snap`, `cnv publish`, `cnv status`, `cnv diff`, `cnv fetch`, `cnv converge`, `cnv promote`, `cnv resolve`, `cnv restore`
+  - `converge snap`, `converge publish`, `converge status`, `converge diff`, `converge fetch`, `converge bundle`, `converge promote`, `converge release`, `converge resolve`, `converge restore`
   - add `--json` outputs early.
-- `cnv` with no args opens an interactive TUI for:
+- `converge` with no args opens an interactive TUI for:
   - gate graph + scope navigation
   - incoming publications/bundles "inbox"
   - superposition browsing and resolution

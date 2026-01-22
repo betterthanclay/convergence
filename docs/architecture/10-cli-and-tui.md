@@ -15,7 +15,7 @@ Core verbs (initial set):
 - `status`
 - `diff`
 - `fetch`
-- `converge`
+- `bundle`
 - `promote`
 - `release`
 - `resolve`
@@ -23,7 +23,7 @@ Core verbs (initial set):
 
 ## TUI principles
 
-- `cnv` (no args) opens an interactive TUI.
+- `converge` (no args) opens an interactive TUI.
 - TUI is a client of the same underlying commands/APIs.
 
 TUI capabilities:

@@ -2,7 +2,7 @@
 
 This document specifies the meaning of the key user-facing operations.
 
-## `cnv snap`
+## `converge snap`
 
 Creates a new `snap` from the current workspace filesystem state.
 
@@ -16,7 +16,7 @@ Notes:
 - v1 may be manual-only.
 - Later phases can add continuous capture via daemon/IDE integration.
 
-## `cnv diff`
+## `converge diff`
 
 Computes and displays differences between:
 - workspace filesystem and a base bundle
@@ -27,7 +27,7 @@ Diff requirements:
 - text: structural hunks
 - binary: metadata, hashes, and (optional) specialized viewers
 
-## `cnv publish`
+## `converge publish`
 
 Creates a `publication` that submits a snap to a specific gate within a scope.
 
@@ -36,7 +36,7 @@ Semantics:
 - Publish is a declaration of "complete for this phase".
 - Publish does not require the system to converge anything immediately.
 
-## `cnv converge`
+## `converge bundle`
 
 Gate operator action that selects a set of inputs (publications and/or upstream bundles) and coalesces them into a new `bundle`.
 
@@ -45,7 +45,7 @@ Semantics:
 - The resulting bundle may include unresolved superpositions.
 - The gate evaluates its policy to compute promotability.
 
-## `cnv promote`
+## `converge promote`
 
 Advances a bundle to the next gate in the graph.
 
@@ -54,7 +54,7 @@ Semantics:
 - Promotion records provenance (who promoted, when, policy evaluations).
 - Promotion does not rewrite the bundle; it advances a pointer/state in the scope.
 
-## `cnv release`
+## `converge release`
 
 Marks a bundle as a release in a named release channel.
 
@@ -63,7 +63,7 @@ Semantics:
 - A repo can allow release creation from earlier gates (e.g. compatibility releases) if gate policy permits.
 - Release creation records provenance (who released, from which bundle, under which policy).
 
-## `cnv resolve`
+## `converge resolve`
 
 Creates resolution objects for superpositions.
 
@@ -73,7 +73,7 @@ Semantics:
   - as part of producing a bundle at a gate
 - Resolution produces a new manifest that selects/merges variants.
 
-## `cnv restore`
+## `converge restore`
 
 Materializes a chosen snap or bundle into the workspace.
 

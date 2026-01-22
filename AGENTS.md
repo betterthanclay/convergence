@@ -15,7 +15,7 @@ Key concepts you will see in the docs:
 ## Implementation
 
 - Language: Rust.
-- Primary UX: a deterministic CLI (`cnv <action>`) plus an interactive TUI (`cnv` with no args).
+- Primary UX: a deterministic CLI (`converge <action>`) plus an interactive TUI (`converge` with no args).
 - Architecture: centralized authority (GitHub-like) with identity, access control, gates, scopes, provenance.
 
 ## Documentation Is The Source Of Truth
