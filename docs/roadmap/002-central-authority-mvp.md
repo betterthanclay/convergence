@@ -104,11 +104,11 @@ Minimum provenance:
 
 ### F) Publish intake API
 
-- [ ] Endpoint: create publication referencing a snap.
-- [ ] Validate:
-  - [ ] user has permission to publish to target repo/scope/gate
-  - [ ] snap exists (or upload as part of publish)
-- [ ] Store publication metadata + provenance.
+- [x] Endpoint: create publication referencing a snap.
+- [x] Validate:
+  - [x] user has permission to publish to target repo/scope/gate
+  - [x] snap exists (or upload as part of publish)
+- [x] Store publication metadata + provenance.
 
 ### G) Object fetch API
 

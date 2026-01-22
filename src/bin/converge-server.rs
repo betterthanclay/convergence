@@ -38,12 +38,25 @@ struct Repo {
 
     gates: Vec<Gate>,
     scopes: HashSet<String>,
+
+    snaps: HashSet<String>,
+    publications: Vec<Publication>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Gate {
     id: String,
     name: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct Publication {
+    id: String,
+    snap_id: String,
+    scope: String,
+    gate: String,
+    publisher: String,
+    created_at: String,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -114,6 +127,10 @@ async fn run() -> Result<()> {
         .route("/repos/:repo_id/lanes", get(list_lanes))
         .route("/repos/:repo_id/gates", get(list_gates))
         .route("/repos/:repo_id/scopes", get(list_scopes).post(create_scope))
+        .route(
+            "/repos/:repo_id/publications",
+            get(list_publications).post(create_publication),
+        )
         .route(
             "/repos/:repo_id/objects/blobs/:blob_id",
             axum::routing::put(put_blob),
@@ -239,6 +256,9 @@ async fn create_repo(
     let mut scopes = HashSet::new();
     scopes.insert("main".to_string());
 
+    let snaps = HashSet::new();
+    let publications = Vec::new();
+
     let repo = Repo {
         id: payload.id.clone(),
         owner: subject.user.clone(),
@@ -248,6 +268,9 @@ async fn create_repo(
 
         gates,
         scopes,
+
+        snaps,
+        publications,
     };
     repos.insert(repo.id.clone(), repo.clone());
 
@@ -487,7 +510,96 @@ async fn put_snap(
         .join("objects/snaps")
         .join(format!("{}.json", snap_id));
     write_if_absent(&path, &bytes).map_err(internal_error)?;
+
+    // Record snap existence for later publication validation.
+    {
+        let mut repos = state.repos.write().await;
+        if let Some(repo) = repos.get_mut(&repo_id) {
+            repo.snaps.insert(snap_id);
+        }
+    }
+
     Ok(StatusCode::CREATED)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CreatePublicationRequest {
+    snap_id: String,
+    scope: String,
+    gate: String,
+}
+
+async fn create_publication(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+    Json(payload): Json<CreatePublicationRequest>,
+) -> Result<Json<Publication>, Response> {
+    validate_object_id(&payload.snap_id).map_err(bad_request)?;
+    validate_scope_id(&payload.scope).map_err(bad_request)?;
+    validate_gate_id(&payload.gate).map_err(bad_request)?;
+
+    let created_at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+
+    let id = {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(repo_id.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(payload.snap_id.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(payload.scope.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(payload.gate.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(subject.user.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(created_at.as_bytes());
+        hasher.finalize().to_hex().to_string()
+    };
+
+    let mut repos = state.repos.write().await;
+    let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
+    if !can_publish(repo, &subject.user) {
+        return Err(forbidden());
+    }
+    if !repo.scopes.contains(&payload.scope) {
+        return Err(bad_request(anyhow::anyhow!("unknown scope")));
+    }
+    if !repo.gates.iter().any(|g| g.id == payload.gate) {
+        return Err(bad_request(anyhow::anyhow!("unknown gate")));
+    }
+    if !repo.snaps.contains(&payload.snap_id) {
+        return Err(bad_request(anyhow::anyhow!(
+            "unknown snap (upload snap first)"
+        )));
+    }
+
+    let pubrec = Publication {
+        id,
+        snap_id: payload.snap_id,
+        scope: payload.scope,
+        gate: payload.gate,
+        publisher: subject.user,
+        created_at,
+    };
+    repo.publications.push(pubrec.clone());
+
+    Ok(Json(pubrec))
+}
+
+async fn list_publications(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<Vec<Publication>>, Response> {
+    let repos = state.repos.read().await;
+    let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+    if !can_read(repo, &subject.user) {
+        return Err(forbidden());
+    }
+    Ok(Json(repo.publications.clone()))
 }
 
 fn validate_object_id(id: &str) -> Result<()> {
@@ -550,6 +662,19 @@ fn validate_scope_id(id: &str) -> Result<()> {
         return Err(anyhow::anyhow!(
             "scope id must be lowercase alnum or '-', '/'"
         ));
+    }
+    Ok(())
+}
+
+fn validate_gate_id(id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(anyhow::anyhow!("gate id cannot be empty"));
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err(anyhow::anyhow!("gate id must be lowercase alnum or '-'"));
     }
     Ok(())
 }
