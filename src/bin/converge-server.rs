@@ -33,6 +33,15 @@ struct Repo {
     readers: HashSet<String>,
     publishers: HashSet<String>,
     lanes: HashMap<String, Lane>,
+
+    gates: Vec<Gate>,
+    scopes: HashSet<String>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct Gate {
+    id: String,
+    name: String,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -100,6 +109,8 @@ async fn run() -> Result<()> {
         .route("/repos/:repo_id", get(get_repo))
         .route("/repos/:repo_id/permissions", get(get_repo_permissions))
         .route("/repos/:repo_id/lanes", get(list_lanes))
+        .route("/repos/:repo_id/gates", get(list_gates))
+        .route("/repos/:repo_id/scopes", get(list_scopes).post(create_scope))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_bearer,
@@ -205,12 +216,23 @@ async fn create_repo(
     let mut lanes = HashMap::new();
     lanes.insert(default_lane.id.clone(), default_lane);
 
+    let gates = vec![Gate {
+        id: "dev-intake".to_string(),
+        name: "Dev Intake".to_string(),
+    }];
+
+    let mut scopes = HashSet::new();
+    scopes.insert("main".to_string());
+
     let repo = Repo {
         id: payload.id.clone(),
         owner: subject.user.clone(),
         readers,
         publishers,
         lanes,
+
+        gates,
+        scopes,
     };
     repos.insert(repo.id.clone(), repo.clone());
 
@@ -274,6 +296,62 @@ async fn list_lanes(
     Ok(Json(out))
 }
 
+async fn list_gates(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<Vec<Gate>>, Response> {
+    let repos = state.repos.read().await;
+    let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+    if !can_read(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    Ok(Json(repo.gates.clone()))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CreateScopeRequest {
+    id: String,
+}
+
+async fn create_scope(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+    Json(payload): Json<CreateScopeRequest>,
+) -> Result<Json<serde_json::Value>, Response> {
+    validate_scope_id(&payload.id).map_err(bad_request)?;
+
+    let mut repos = state.repos.write().await;
+    let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
+    if !can_publish(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    if !repo.scopes.insert(payload.id.clone()) {
+        return Err(conflict("scope already exists"));
+    }
+
+    Ok(Json(serde_json::json!({"id": payload.id})))
+}
+
+async fn list_scopes(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<Vec<String>>, Response> {
+    let repos = state.repos.read().await;
+    let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+    if !can_read(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    let mut out: Vec<String> = repo.scopes.iter().cloned().collect();
+    out.sort();
+    Ok(Json(out))
+}
+
 fn validate_repo_id(id: &str) -> Result<()> {
     if id.is_empty() {
         return Err(anyhow::anyhow!("repo id cannot be empty"));
@@ -284,6 +362,21 @@ fn validate_repo_id(id: &str) -> Result<()> {
     {
         return Err(anyhow::anyhow!(
             "repo id must be lowercase alnum or '-'"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_scope_id(id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(anyhow::anyhow!("scope id cannot be empty"));
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '/')
+    {
+        return Err(anyhow::anyhow!(
+            "scope id must be lowercase alnum or '-', '/'"
         ));
     }
     Ok(())

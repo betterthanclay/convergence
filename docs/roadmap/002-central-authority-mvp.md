@@ -89,8 +89,8 @@ Minimum provenance:
 
 - [ ] Implement endpoints to:
   - [x] create a repo
-  - [ ] define a minimal gate graph (can be hard-coded "dev-intake" only initially)
-  - [ ] create scopes
+  - [x] define a minimal gate graph (can be hard-coded "dev-intake" only initially)
+  - [x] create scopes
 
 ### E) Object upload API
 
