@@ -133,15 +133,19 @@ async fn run() -> Result<()> {
         )
         .route(
             "/repos/:repo_id/objects/blobs/:blob_id",
-            axum::routing::put(put_blob),
+            axum::routing::put(put_blob).get(get_blob),
         )
         .route(
             "/repos/:repo_id/objects/manifests/:manifest_id",
-            axum::routing::put(put_manifest),
+            axum::routing::put(put_manifest).get(get_manifest),
         )
         .route(
             "/repos/:repo_id/objects/snaps/:snap_id",
-            axum::routing::put(put_snap),
+            axum::routing::put(put_snap).get(get_snap),
+        )
+        .route(
+            "/repos/:repo_id/objects/missing",
+            axum::routing::post(find_missing_objects),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -425,6 +429,36 @@ async fn put_blob(
     Ok(StatusCode::CREATED)
 }
 
+async fn get_blob(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, blob_id)): Path<(String, String)>,
+) -> Result<axum::body::Bytes, Response> {
+    validate_object_id(&blob_id).map_err(bad_request)?;
+
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_read(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    let path = repo_data_dir(&state, &repo_id)
+        .join("objects/blobs")
+        .join(&blob_id);
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("read {}", path.display()))
+        .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    let actual = blake3::hash(&bytes).to_hex().to_string();
+    if actual != blob_id {
+        return Err(internal_error(anyhow::anyhow!(
+            "blob integrity check failed"
+        )));
+    }
+    Ok(axum::body::Bytes::from(bytes))
+}
+
 async fn put_manifest(
     State(state): State<Arc<AppState>>,
     Extension(subject): Extension<Subject>,
@@ -462,6 +496,39 @@ async fn put_manifest(
         .join(format!("{}.json", manifest_id));
     write_if_absent(&path, &body).map_err(internal_error)?;
     Ok(StatusCode::CREATED)
+}
+
+async fn get_manifest(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, manifest_id)): Path<(String, String)>,
+) -> Result<Response, Response> {
+    validate_object_id(&manifest_id).map_err(bad_request)?;
+
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_read(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    let path = repo_data_dir(&state, &repo_id)
+        .join("objects/manifests")
+        .join(format!("{}.json", manifest_id));
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("read {}", path.display()))
+        .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    let actual = blake3::hash(&bytes).to_hex().to_string();
+    if actual != manifest_id {
+        return Err(internal_error(anyhow::anyhow!(
+            "manifest integrity check failed"
+        )));
+    }
+    // Validate JSON schema (and fail fast on corruption).
+    let _: converge::model::Manifest =
+        serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    Ok(json_bytes(bytes))
 }
 
 async fn put_snap(
@@ -520,6 +587,120 @@ async fn put_snap(
     }
 
     Ok(StatusCode::CREATED)
+}
+
+async fn get_snap(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, snap_id)): Path<(String, String)>,
+) -> Result<Response, Response> {
+    validate_object_id(&snap_id).map_err(bad_request)?;
+
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_read(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    let path = repo_data_dir(&state, &repo_id)
+        .join("objects/snaps")
+        .join(format!("{}.json", snap_id));
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("read {}", path.display()))
+        .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    let snap: converge::model::SnapRecord =
+        serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    let computed = converge::model::compute_snap_id(
+        &snap.created_at,
+        &snap.root_manifest,
+        snap.message.as_deref(),
+    );
+    if computed != snap.id {
+        return Err(internal_error(anyhow::anyhow!(
+            "snap integrity check failed"
+        )));
+    }
+    Ok(json_bytes(bytes))
+}
+
+fn json_bytes(bytes: Vec<u8>) -> Response {
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        axum::body::Bytes::from(bytes),
+    )
+        .into_response()
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MissingObjectsRequest {
+    blobs: Vec<String>,
+    manifests: Vec<String>,
+    snaps: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct MissingObjectsResponse {
+    missing_blobs: Vec<String>,
+    missing_manifests: Vec<String>,
+    missing_snaps: Vec<String>,
+}
+
+async fn find_missing_objects(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+    Json(req): Json<MissingObjectsRequest>,
+) -> Result<Json<MissingObjectsResponse>, Response> {
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_publish(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    for id in req
+        .blobs
+        .iter()
+        .chain(req.manifests.iter())
+        .chain(req.snaps.iter())
+    {
+        validate_object_id(id).map_err(bad_request)?;
+    }
+
+    let root = repo_data_dir(&state, &repo_id).join("objects");
+
+    let mut missing_blobs = Vec::new();
+    for id in req.blobs {
+        let p = root.join("blobs").join(&id);
+        if !p.exists() {
+            missing_blobs.push(id);
+        }
+    }
+
+    let mut missing_manifests = Vec::new();
+    for id in req.manifests {
+        let p = root.join("manifests").join(format!("{}.json", id));
+        if !p.exists() {
+            missing_manifests.push(id);
+        }
+    }
+
+    let mut missing_snaps = Vec::new();
+    for id in req.snaps {
+        let p = root.join("snaps").join(format!("{}.json", id));
+        if !p.exists() {
+            missing_snaps.push(id);
+        }
+    }
+
+    Ok(Json(MissingObjectsResponse {
+        missing_blobs,
+        missing_manifests,
+        missing_snaps,
+    }))
 }
 
 #[derive(Debug, serde::Deserialize)]

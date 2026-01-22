@@ -112,13 +112,13 @@ Minimum provenance:
 
 ### G) Object fetch API
 
-- [ ] Endpoints to fetch:
-  - [ ] blobs
-  - [ ] manifests
-  - [ ] snaps
-- [ ] Support a "missing objects" workflow:
-  - [ ] client sends list of ids, server returns which are missing
-  - [ ] client uploads only missing
+- [x] Endpoints to fetch:
+  - [x] blobs
+  - [x] manifests
+  - [x] snaps
+- [x] Support a "missing objects" workflow:
+  - [x] client sends list of ids, server returns which are missing
+  - [x] client uploads only missing
 
 ### H) Client changes
 
