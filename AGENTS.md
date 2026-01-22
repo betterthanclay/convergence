@@ -25,16 +25,18 @@ Use `docs/` as the canonical reference for intent, terminology, and decisions. K
 Notable locations:
 - `docs/decisions/`: timestamped architectural/product decisions.
 - `docs/git-podcast/`: transcript-derived notes and early design directions.
+- `docs/architecture/`: architecture and semantics.
+- `docs/roadmap/`: Phase documents (entry point for significant work).
 
 ## Roadmap And Phases (Entry Point For Work)
 
 We organize significant work via phase documents:
 - Folder: `docs/roadmap/`
-- Files: numbered "Phase" documents (for example: `Phase-001-<title>.md`).
+- Files: numbered, lowercase phase documents (for example: `001-<title>.md`).
 - Each Phase document defines:
   - the goal
   - scope and non-goals
-  - a grouped list of actionable tasks
+  - a grouped list of actionable tasks as Markdown checkboxes (`- [ ] ...`)
   - acceptance/exit criteria
 
 Process rule:
