@@ -2,14 +2,14 @@
 
 Convergence is an experimental next-generation version control and collaboration system.
 
-Core idea: capture work continuously (or via explicit snapshots), then converge it through configurable, policy-driven phase gates into increasingly "consumable" packages, culminating in a release.
+Core idea: capture work continuously (or via explicit snapshots), then converge it through configurable, policy-driven phase gates into increasingly "consumable" bundles, culminating in a release.
 
 Key concepts you will see in the docs:
 - `snap`: a snapshot of a workspace state (not necessarily buildable)
 - `publish`: submit a snap to a gate/scope as an input
-- `package`: output produced by a gate after coalescing inputs
-- `promote`: move a package to the next gate
-- `release`: final public output
+- `bundle`: output produced by a gate after coalescing inputs
+- `promote`: move a bundle to the next gate
+- `release`: final public output (typically from the terminal gate, but not strictly required)
 - "superpositions": conflicts preserved as data, resolved when appropriate per gate policy
 
 ## Implementation

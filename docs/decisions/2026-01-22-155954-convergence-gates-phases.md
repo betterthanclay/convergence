@@ -1,4 +1,4 @@
-# Decision: Convergence Phases, Gates, and Packages
+# Decision: Convergence Phases, Gates, and Bundles
 
 Timestamp: 2026-01-22 15:59:54
 
@@ -18,7 +18,7 @@ The core mental model is a tree/network that converges through multiple phases (
   - identity and access control
   - gate graph definitions
   - scopes (branch-like depth dimension)
-  - published objects, packages, and releases
+  - published objects, bundles, and releases
   - provenance/audit history
 - Clients are authoritative only for local, private snapshots until they publish.
 - Small-team mode uses the same architecture (a lightweight single-node server can run locally or on a shared machine), with good caching/offline behavior.
@@ -27,9 +27,9 @@ The core mental model is a tree/network that converges through multiple phases (
 
 - `snap`: local snapshot of workspace state (no requirement that it builds/works). In v1, created explicitly via `cnv snap`.
 - `publish`: submit a selected `snap` to a gate+scope as an input artifact ("complete for this phase").
-- `package`: the output artifact produced by a gate after it coalesces inputs.
-- `promote`: advance a package to the next gate.
-- `release`: a package promoted out of the final gate for public consumption.
+- `bundle`: the output artifact produced by a gate after it coalesces inputs.
+- `promote`: advance a bundle to the next gate.
+- `release`: a bundle designated for consumption via a release channel (typically from the terminal gate, but not strictly required).
 
 ### 3) Convergence model: gate graph + breadth/depth scoping
 
@@ -38,7 +38,7 @@ The core mental model is a tree/network that converges through multiple phases (
 - **Depth (scopes):** a branch-like dimension for feature/milestone/release-train tracks that flow through the gate graph.
 
 Practical invariant:
-- A workspace is always viewing a tuple like `(scope, base package, overlays)`.
+- A workspace is always viewing a tuple like `(scope, base bundle, overlays)`.
 
 ### 4) Superpositions are policy-scoped by gates
 
@@ -46,11 +46,11 @@ Practical invariant:
 - Large-org-safe default: you do not see everyone’s in-progress state; visibility is bounded by lane/strand and what you explicitly subscribe to.
 - Gates define "superposition breadth" (who/what you can observe) and "superposition depth" (which scope you’re operating within).
 
-### 5) Gate behavior: always emit a package; policy determines pass/promote
+### 5) Gate behavior: always emit a bundle; policy determines pass/promote
 
 Decision:
-- A gate always emits a `package` when it converges selected inputs, even if that package contains unresolved superpositions.
-- The gate (and/or downstream gates) defines what state a package must be in to pass (promotable) via policy.
+- A gate always emits a `bundle` when it converges selected inputs, even if that bundle contains unresolved superpositions.
+- The gate (and/or downstream gates) defines what state a bundle must be in to pass (promotable) via policy.
 
 Rationale:
 - Avoid blocking work while still allowing strictness where it matters.
@@ -63,14 +63,14 @@ Rationale:
   - add `--json` outputs early.
 - `cnv` with no args opens an interactive TUI for:
   - gate graph + scope navigation
-  - incoming publications/packages "inbox"
+  - incoming publications/bundles "inbox"
   - superposition browsing and resolution
   - promotion workflow (what is promotable, what policy blocks it)
 
 ### 7) MVP sequencing
 
 - v0 (spec-first): formalize object model, gate/scopes semantics, and workflows (dev/integrator/release).
-- v1: local content store + `snap/diff/restore` + server-side gate graph/ACLs + `publish` intake + `package` objects.
+- v1: local content store + `snap/diff/restore` + server-side gate graph/ACLs + `publish` intake + `bundle` objects.
 - v2: TUI built on the same deterministic CLI/API.
 - v3: optional daemon/IDE integration for automatic capture and richer forensics.
 
@@ -78,14 +78,14 @@ Rationale:
 
 - Gate definitions become a primary configuration surface for orgs (policy, permissions, checks, and promotion rules).
 - Superpositions are preserved and visible by design, but must be constrained by lane/scope and controlled by gate policy to scale.
-- "Ready for consumption" is phased: publish/package/release are distinct and should be treated distinctly in UX and governance.
+- "Ready for consumption" is phased: publish/bundle/release are distinct and should be treated distinctly in UX and governance.
 
 ## Open Questions (next)
 
 - How to represent and resolve superpositions without turning the working tree into a cluttered set of alternate files.
 - Exact authorization model:
   - who can publish to a gate
-  - who can converge inputs and emit packages
+  - who can converge inputs and emit bundles
   - who can promote across gates
 - What the minimal gate policy DSL looks like (or whether policies are external CI workflows).
-- Whether packages can be partially promotable (by path/area) or only whole-package.
+- Whether bundles can be partially promotable (by path/area) or only whole-bundle.
