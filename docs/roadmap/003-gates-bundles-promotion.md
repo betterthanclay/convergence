@@ -67,9 +67,9 @@ Next step:
 
 ### E) Promotion mechanics
 
-- [ ] Define promotion state per `(repo, scope, gate)`.
-- [ ] Implement `promote` API with authorization.
-- [ ] Ensure promotion is race-safe (per `(repo, scope, gate)` serialization).
+- [x] Define promotion state per `(repo, scope, gate)`.
+- [x] Implement `promote` API with authorization.
+- [x] Ensure promotion is race-safe (per `(repo, scope, gate)` serialization).
 
 ### F) Client commands
 
