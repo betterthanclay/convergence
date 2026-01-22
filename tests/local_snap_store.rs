@@ -36,6 +36,41 @@ fn snap_and_restore_roundtrip() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn blob_integrity_check_detects_corruption() -> Result<()> {
+    let tmp = tempfile::tempdir().context("create tempdir")?;
+    let root = tmp.path();
+    let ws = Workspace::init(root, false)?;
+
+    let id = ws.store.put_blob(b"abc")?;
+    let blob_path = root
+        .join(".converge")
+        .join("objects/blobs")
+        .join(id.as_str());
+
+    fs::write(&blob_path, b"not abc").context("corrupt blob")?;
+    assert!(ws.store.get_blob(&id).is_err());
+    Ok(())
+}
+
+#[test]
+fn manifest_is_deterministic_for_same_tree() -> Result<()> {
+    let tmp = tempfile::tempdir().context("create tempdir")?;
+    let root = tmp.path();
+
+    fs::create_dir_all(root.join("sub")).context("create sub dir")?;
+    fs::write(root.join("a.txt"), b"hello\n").context("write a.txt")?;
+    fs::write(root.join("sub/b.txt"), b"world\n").context("write b.txt")?;
+
+    let ws = Workspace::init(root, false)?;
+    let s1 = ws.create_snap(Some("one".to_string()))?;
+    let s2 = ws.create_snap(Some("two".to_string()))?;
+    assert_eq!(s1.root_manifest, s2.root_manifest);
+    assert_eq!(s1.stats.files, s2.stats.files);
+    assert_eq!(s1.stats.dirs, s2.stats.dirs);
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Node {
     File { bytes: Vec<u8>, mode: u32 },

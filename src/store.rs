@@ -67,7 +67,17 @@ impl LocalStore {
 
     pub fn get_blob(&self, id: &ObjectId) -> Result<Vec<u8>> {
         let path = self.root.join("objects/blobs").join(id.as_str());
-        fs::read(&path).with_context(|| format!("read blob {}", id.as_str()))
+        let bytes = fs::read(&path).with_context(|| format!("read blob {}", id.as_str()))?;
+        let actual = blake3::hash(&bytes).to_hex().to_string();
+        if actual != id.0 {
+            return Err(anyhow!(
+                "blob integrity check failed for {} (expected {}, got {})",
+                path.display(),
+                id.as_str(),
+                actual
+            ));
+        }
+        Ok(bytes)
     }
 
     pub fn put_manifest(&self, manifest: &Manifest) -> Result<ObjectId> {
@@ -87,6 +97,15 @@ impl LocalStore {
             .join("objects/manifests")
             .join(format!("{}.json", id.as_str()));
         let bytes = fs::read(&path).with_context(|| format!("read manifest {}", id.as_str()))?;
+        let actual = blake3::hash(&bytes).to_hex().to_string();
+        if actual != id.0 {
+            return Err(anyhow!(
+                "manifest integrity check failed for {} (expected {}, got {})",
+                path.display(),
+                id.as_str(),
+                actual
+            ));
+        }
         let m: Manifest = serde_json::from_slice(&bytes)
             .with_context(|| format!("parse manifest {}", id.as_str()))?;
         Ok(m)

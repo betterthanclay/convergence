@@ -42,3 +42,17 @@ We organize significant work via phase documents:
 Process rule:
 - For any significant work in this repository, start by creating or updating a Phase document in `docs/roadmap/`.
 - When implementing, keep the Phase doc (and any impacted decision docs) updated to reflect what is actually being built.
+
+## Continue Policy
+
+At each point in the conversation, the agent should propose the next actionable todo, either:
+- by selecting the next checkbox task from the current Phase document in `docs/roadmap/`, or
+- by suggesting the next logical implementation step if the roadmap does not cover it.
+
+When the user replies with "Continue":
+- Proceed with the proposed todo(s).
+- If multiple options were proposed and the user replies only "Continue", execute them in the order presented.
+- If the options should be sequenced across multiple messages, complete the first option, then propose the next.
+
+Roadmap hygiene:
+- As tasks are completed, tick the corresponding checkboxes in the relevant `docs/roadmap/*.md` file.

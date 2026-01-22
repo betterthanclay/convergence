@@ -1,5 +1,10 @@
 # Phase 001: Local Snap Store (MVP Foundation)
 
+Current status:
+- Implemented: local `.converge/` store, `converge init|snap|snaps|show|restore`
+- Determinism: sorted manifests; restore recreates byte-identical trees
+- Tests: roundtrip restore, blob corruption detection, manifest determinism
+
 ## Goal
 
 Ship a working local-first Convergence CLI that can:
@@ -42,56 +47,62 @@ Explicitly out of scope:
 - All IDs should be stable and deterministic.
 - Restoring the same snap into an empty directory should produce byte-identical results.
 
+Current on-disk layout (v1):
+- `.converge/config.json`
+- `.converge/objects/blobs/<blake3>`
+- `.converge/objects/manifests/<blake3>.json`
+- `.converge/snaps/<snap_id>.json`
+
 ## Tasks
 
 ### A) Repository + CLI skeleton
 
-- [ ] Create a Rust workspace (Cargo) and a `converge` binary.
-- [ ] Implement top-level command parsing and help output.
-- [ ] Implement `--json` output plumbing (even if only a subset of commands supports it initially).
+- [x] Create a Rust workspace (Cargo) and a `converge` binary.
+- [x] Implement top-level command parsing and help output.
+- [x] Implement `--json` output plumbing (even if only a subset of commands supports it initially).
 
 ### B) Local workspace metadata
 
-- [ ] Define the workspace config format (repo-independent for this phase).
-- [ ] Decide and document on-disk layout (e.g. `.converge/`).
-- [ ] Implement `converge init` to set up metadata and directories.
+- [x] Define the workspace config format (repo-independent for this phase).
+- [x] Decide and document on-disk layout (e.g. `.converge/`).
+- [x] Implement `converge init` to set up metadata and directories.
 
 ### C) Content-addressed blob store
 
-- [ ] Define blob hashing algorithm (e.g. BLAKE3, SHA-256) and ID representation.
-- [ ] Store blobs by hash and prevent duplication.
-- [ ] Implement integrity checks when reading blobs.
+- [x] Define blob hashing algorithm (e.g. BLAKE3, SHA-256) and ID representation.
+- [x] Store blobs by hash and prevent duplication.
+- [x] Implement integrity checks when reading blobs.
 
 ### D) Manifests (directory trees)
 
-- [ ] Define manifest encoding (e.g. CBOR/JSON) and hashing.
-- [ ] Support entry types:
-  - [ ] file (blob + metadata)
-  - [ ] dir (child manifest)
-  - [ ] symlink (optional; can be deferred)
-- [ ] Implement deterministic ordering and hashing.
+- [x] Define manifest encoding (e.g. CBOR/JSON) and hashing.
+- [x] Support entry types:
+  - [x] file (blob + metadata)
+  - [x] dir (child manifest)
+  - [x] symlink (optional; can be deferred)
+- [x] Implement deterministic ordering and hashing.
 
 ### E) Snap creation
 
-- [ ] Walk the filesystem and build a manifest tree.
-- [ ] Store newly discovered blobs/manifests.
-- [ ] Create a snap record that points to the root manifest.
-- [ ] Implement `converge snap`.
+- [x] Walk the filesystem and build a manifest tree.
+- [x] Store newly discovered blobs/manifests.
+- [x] Create a snap record that points to the root manifest.
+- [x] Implement `converge snap`.
 
 ### F) Listing / inspection
 
-- [ ] Implement `converge snaps` (list snaps, newest first).
-- [ ] Implement `converge show <snap-id>` (metadata + summary).
+- [x] Implement `converge snaps` (list snaps, newest first).
+- [x] Implement `converge show <snap-id>` (metadata + summary).
 
 ### G) Restore
 
-- [ ] Implement `converge restore <snap-id>`.
-- [ ] Define behavior for existing files (default: refuse unless `--force`, or restore into empty dir).
+- [x] Implement `converge restore <snap-id>`.
+- [x] Define behavior for existing files (default: refuse unless `--force`, or restore into empty dir).
 
 ### H) Tests
 
-- [ ] Unit tests for hashing and manifest determinism.
-- [ ] Golden tests for restore determinism.
+- [x] Unit tests for hashing and manifest determinism.
+- [x] Golden tests for restore determinism.
 
 ## Exit Criteria
 
