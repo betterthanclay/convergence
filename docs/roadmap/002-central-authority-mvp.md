@@ -147,7 +147,7 @@ Minimum provenance:
 
 - [ ] Server API contract tests (happy path + authz failures).
 - [ ] Upload integrity tests (hash mismatch rejected).
-- [ ] End-to-end test: init -> snap -> publish -> fresh workspace fetch -> restore.
+- [x] End-to-end test: init -> snap -> publish -> fresh workspace fetch -> restore.
 
 ## Exit Criteria
 
