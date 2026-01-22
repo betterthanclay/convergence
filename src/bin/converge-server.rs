@@ -81,6 +81,10 @@ struct Args {
     #[arg(long, default_value = "127.0.0.1:8080")]
     addr: SocketAddr,
 
+    /// Write bound address to this file (dev/test convenience)
+    #[arg(long)]
+    addr_file: Option<PathBuf>,
+
     /// Data directory (future use)
     #[arg(long, default_value = "./converge-data")]
     data_dir: PathBuf,
@@ -165,6 +169,11 @@ async fn run() -> Result<()> {
         .local_addr()
         .context("read listener local addr")?;
     eprintln!("converge-server listening on {}", local_addr);
+
+    if let Some(addr_file) = &args.addr_file {
+        std::fs::write(addr_file, local_addr.to_string())
+            .with_context(|| format!("write addr file {}", addr_file.display()))?;
+    }
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

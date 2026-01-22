@@ -91,7 +91,7 @@ Minimum provenance:
 
 ### D) Repo + gate graph + scope registry
 
-- [ ] Implement endpoints to:
+- [x] Implement endpoints to:
   - [x] create a repo
   - [x] define a minimal gate graph (can be hard-coded "dev-intake" only initially)
   - [x] create scopes
@@ -145,8 +145,8 @@ Minimum provenance:
 
 ### J) Tests
 
-- [ ] Server API contract tests (happy path + authz failures).
-- [ ] Upload integrity tests (hash mismatch rejected).
+- [x] Server API contract tests (happy path + authz failures).
+- [x] Upload integrity tests (hash mismatch rejected).
 - [x] End-to-end test: init -> snap -> publish -> fresh workspace fetch -> restore.
 
 ## Exit Criteria

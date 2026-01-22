@@ -1,11 +1,10 @@
 use std::fs;
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
 
 use anyhow::{Context, Result};
+
+mod common;
 
 fn run_converge(cwd: &Path, args: &[&str]) -> Result<String> {
     let out = Command::new(env!("CARGO_BIN_EXE_converge"))
@@ -24,22 +23,6 @@ fn run_converge(cwd: &Path, args: &[&str]) -> Result<String> {
         );
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-fn wait_for_healthz(base_url: &str) -> Result<()> {
-    let client = reqwest::blocking::Client::new();
-    let start = Instant::now();
-    loop {
-        if start.elapsed() > Duration::from_secs(5) {
-            anyhow::bail!("server did not become healthy at {}/healthz", base_url);
-        }
-        match client.get(format!("{}/healthz", base_url)).send() {
-            Ok(resp) if resp.status().is_success() => return Ok(()),
-            _ => {
-                thread::sleep(Duration::from_millis(50));
-            }
-        }
-    }
 }
 
 fn write_fixture(dir: &Path) -> Result<()> {
@@ -84,38 +67,9 @@ fn capture_dir(root: &Path, rel: &Path, out: &mut Vec<(PathBuf, Vec<u8>)>) -> Re
 
 #[test]
 fn e2e_publish_fetch_restore() -> Result<()> {
-    let server_data = tempfile::tempdir().context("create server tempdir")?;
-
-    let listener = TcpListener::bind("127.0.0.1:0").context("bind ephemeral port")?;
-    let port = listener.local_addr()?.port();
-    drop(listener);
-
-    let token = "dev";
-    let base_url = format!("http://127.0.0.1:{}", port);
-
-    let server = Command::new(env!("CARGO_BIN_EXE_converge-server"))
-        .args([
-            "--addr",
-            &format!("127.0.0.1:{}", port),
-            "--data-dir",
-            server_data.path().to_str().unwrap(),
-            "--dev-token",
-            token,
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("spawn converge-server")?;
-
-    struct KillOnDrop(std::process::Child);
-    impl Drop for KillOnDrop {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-        }
-    }
-    let _guard = KillOnDrop(server);
-
-    wait_for_healthz(&base_url)?;
+    let server = common::spawn_server()?;
+    let token = server.token.as_str();
+    let base_url = server.base_url.clone();
 
     let ws1 = tempfile::tempdir().context("create ws1")?;
     let ws2 = tempfile::tempdir().context("create ws2")?;
