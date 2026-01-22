@@ -80,15 +80,15 @@ Minimum provenance:
 
 ### C) Authorization
 
-- [ ] Implement repo-level permissions:
-  - [ ] who can read
-  - [ ] who can publish
-- [ ] Implement lane membership as a first pass (even if lanes are "one default lane" initially).
+- [x] Implement repo-level permissions:
+  - [x] who can read
+  - [x] who can publish
+- [x] Implement lane membership as a first pass (even if lanes are "one default lane" initially).
 
 ### D) Repo + gate graph + scope registry
 
 - [ ] Implement endpoints to:
-  - [ ] create a repo
+  - [x] create a repo
   - [ ] define a minimal gate graph (can be hard-coded "dev-intake" only initially)
   - [ ] create scopes
 
