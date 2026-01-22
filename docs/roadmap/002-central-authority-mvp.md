@@ -43,6 +43,10 @@ Principles:
 - Snaps remain immutable objects; publishing does not rewrite history.
 - Publish should not block on merge/conflict. (Conflicts become superpositions later.)
 
+Dev note (current implementation):
+- `converge-server` stores repos in-memory; you must create the repo before publishing.
+- Use `converge remote create-repo` (or `POST /repos`) before `converge publish`.
+
 Suggested minimal server implementation choices (can change):
 - Rust HTTP API (e.g. axum)
 - Postgres or SQLite for metadata (SQLite acceptable for dev; Postgres target)
@@ -133,11 +137,11 @@ Minimum provenance:
 
 ### I) Minimal UX
 
-- [ ] `converge status` should show:
-  - [ ] configured repo/remote
-  - [ ] current scope
-  - [ ] most recent publications visible to the user (by lane)
-- [ ] Add `--json` variants for publish/fetch/status.
+- [x] `converge status` should show:
+  - [x] configured repo/remote
+  - [x] current scope
+  - [x] most recent publications visible to the user (by lane)
+- [x] Add `--json` variants for publish/fetch/status.
 
 ### J) Tests
 
