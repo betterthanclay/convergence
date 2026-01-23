@@ -42,11 +42,31 @@ pub fn run() -> Result<()> {
     res
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum Mode {
-    #[default]
-    Local,
-    Remote,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UiMode {
+    Root,
+    Snaps,
+    Inbox,
+    Bundles,
+    Superpositions,
+}
+
+impl UiMode {
+    fn prompt(self) -> &'static str {
+        match self {
+            UiMode::Root => "root>",
+            UiMode::Snaps => "snaps>",
+            UiMode::Inbox => "inbox>",
+            UiMode::Bundles => "bundles>",
+            UiMode::Superpositions => "supers>",
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ViewFrame {
+    mode: UiMode,
+    panel: Option<Panel>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,10 +85,12 @@ struct ScrollEntry {
 
 #[derive(Debug)]
 enum Panel {
-    Status {
+    Snaps {
         title: String,
         updated_at: String,
-        lines: Vec<String>,
+        filter: Option<String>,
+        items: Vec<crate::model::SnapRecord>,
+        selected: usize,
     },
     Inbox {
         title: String,
@@ -105,7 +127,7 @@ enum Panel {
 impl Panel {
     fn title(&self) -> &str {
         match self {
-            Panel::Status { title, .. } => title,
+            Panel::Snaps { title, .. } => title,
             Panel::Inbox { title, .. } => title,
             Panel::Bundles { title, .. } => title,
             Panel::Superpositions { title, .. } => title,
@@ -114,7 +136,7 @@ impl Panel {
 
     fn updated_at(&self) -> &str {
         match self {
-            Panel::Status { updated_at, .. } => updated_at,
+            Panel::Snaps { updated_at, .. } => updated_at,
             Panel::Inbox { updated_at, .. } => updated_at,
             Panel::Bundles { updated_at, .. } => updated_at,
             Panel::Superpositions { updated_at, .. } => updated_at,
@@ -123,7 +145,15 @@ impl Panel {
 
     fn selected(&self) -> Option<usize> {
         match self {
-            Panel::Status { .. } => None,
+            Panel::Snaps {
+                selected, items, ..
+            } => {
+                if items.is_empty() {
+                    None
+                } else {
+                    Some((*selected).min(items.len().saturating_sub(1)))
+                }
+            }
             Panel::Inbox {
                 selected, items, ..
             } => {
@@ -156,23 +186,23 @@ impl Panel {
 
     fn move_up(&mut self) {
         match self {
-            Panel::Inbox { selected, .. }
+            Panel::Snaps { selected, .. }
+            | Panel::Inbox { selected, .. }
             | Panel::Bundles { selected, .. }
             | Panel::Superpositions { selected, .. } => {
                 *selected = selected.saturating_sub(1);
             }
-            Panel::Status { .. } => {}
         }
     }
 
     fn move_down(&mut self) {
         match self {
-            Panel::Inbox { selected, .. }
+            Panel::Snaps { selected, .. }
+            | Panel::Inbox { selected, .. }
             | Panel::Bundles { selected, .. }
             | Panel::Superpositions { selected, .. } => {
                 *selected = selected.saturating_add(1);
             }
-            Panel::Status { .. } => {}
         }
     }
 }
@@ -302,7 +332,7 @@ fn command_defs() -> Vec<CommandDef> {
             name: "snaps",
             aliases: &[],
             usage: "snaps [--limit N]",
-            help: "List snaps",
+            help: "Open the snap browser",
         },
         CommandDef {
             name: "show",
@@ -320,13 +350,7 @@ fn command_defs() -> Vec<CommandDef> {
             name: "clear",
             aliases: &[],
             usage: "clear",
-            help: "Clear scrollback",
-        },
-        CommandDef {
-            name: "panel",
-            aliases: &[],
-            usage: "panel show|close",
-            help: "Show or close the side panel",
+            help: "Clear last output/log",
         },
         CommandDef {
             name: "quit",
@@ -363,13 +387,13 @@ fn command_defs() -> Vec<CommandDef> {
             name: "inbox",
             aliases: &[],
             usage: "inbox [--scope <id>] [--gate <id>] [--filter <q>] [--limit N]",
-            help: "List remote publications",
+            help: "Open inbox browser",
         },
         CommandDef {
             name: "bundles",
             aliases: &[],
             usage: "bundles [--scope <id>] [--gate <id>] [--filter <q>] [--limit N]",
-            help: "List remote bundles",
+            help: "Open bundles browser",
         },
         CommandDef {
             name: "bundle",
@@ -393,9 +417,82 @@ fn command_defs() -> Vec<CommandDef> {
             name: "superpositions",
             aliases: &["supers"],
             usage: "superpositions --bundle-id <id> [--filter <q>]",
-            help: "List conflicted paths in a bundle",
+            help: "Open superpositions browser",
         },
     ]
+}
+
+fn global_command_defs() -> Vec<CommandDef> {
+    vec![
+        CommandDef {
+            name: "help",
+            aliases: &["h", "?"],
+            usage: "help [command]",
+            help: "Show help",
+        },
+        CommandDef {
+            name: "ping",
+            aliases: &[],
+            usage: "ping",
+            help: "Ping remote health endpoint",
+        },
+        CommandDef {
+            name: "quit",
+            aliases: &[],
+            usage: "quit",
+            help: "Exit",
+        },
+    ]
+}
+
+fn snaps_command_defs() -> Vec<CommandDef> {
+    vec![
+        CommandDef {
+            name: "back",
+            aliases: &[],
+            usage: "back",
+            help: "Return to root",
+        },
+        CommandDef {
+            name: "open",
+            aliases: &[],
+            usage: "open <snap_id_prefix>",
+            help: "Select a snap by id",
+        },
+        CommandDef {
+            name: "show",
+            aliases: &[],
+            usage: "show",
+            help: "Show selected snap details",
+        },
+        CommandDef {
+            name: "restore",
+            aliases: &[],
+            usage: "restore [<snap_id_prefix>] [--force]",
+            help: "Restore selected snap",
+        },
+    ]
+}
+
+fn mode_command_defs(mode: UiMode) -> Vec<CommandDef> {
+    match mode {
+        UiMode::Root => command_defs(),
+        UiMode::Snaps => {
+            let mut out = snaps_command_defs();
+            out.extend(global_command_defs());
+            out
+        }
+        UiMode::Inbox | UiMode::Bundles | UiMode::Superpositions => {
+            let mut out = vec![CommandDef {
+                name: "back",
+                aliases: &[],
+                usage: "back",
+                help: "Return to root",
+            }];
+            out.extend(global_command_defs());
+            out
+        }
+    }
 }
 
 fn now_ts() -> String {
@@ -404,21 +501,44 @@ fn now_ts() -> String {
         .unwrap_or_else(|_| "<time>".to_string())
 }
 
-#[derive(Default)]
 struct App {
-    mode: Mode,
     workspace: Option<Workspace>,
     workspace_err: Option<String>,
 
-    scroll: Vec<ScrollEntry>,
+    // Internal log (useful for debugging) but no longer the primary UI.
+    log: Vec<ScrollEntry>,
+
+    last_command: Option<String>,
+    last_result: Option<ScrollEntry>,
+
     input: Input,
 
     suggestions: Vec<CommandDef>,
     suggestion_selected: usize,
 
-    panel: Option<Panel>,
+    frames: Vec<ViewFrame>,
 
     quit: bool,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            workspace: None,
+            workspace_err: None,
+            log: Vec::new(),
+            last_command: None,
+            last_result: None,
+            input: Input::default(),
+            suggestions: Vec::new(),
+            suggestion_selected: 0,
+            frames: vec![ViewFrame {
+                mode: UiMode::Root,
+                panel: None,
+            }],
+            quit: false,
+        }
+    }
 }
 
 impl App {
@@ -443,28 +563,59 @@ impl App {
 
         app.push_output(vec![
             "Type `help` for commands.".to_string(),
-            "(Leading `/` is optional; it forces command mode.)".to_string(),
+            "(Use `Esc` to go back; prefix with `/` to force root commands.)".to_string(),
         ]);
         app
     }
 
-    fn prompt(&self) -> &'static str {
-        match self.mode {
-            Mode::Local => "local>",
-            Mode::Remote => "remote>",
-        }
+    fn mode(&self) -> UiMode {
+        self.frames.last().map(|f| f.mode).unwrap_or(UiMode::Root)
     }
 
-    fn push_entry(&mut self, kind: EntryKind, lines: Vec<String>) {
-        self.scroll.push(ScrollEntry {
-            ts: now_ts(),
-            kind,
-            lines,
+    fn panel(&self) -> Option<&Panel> {
+        self.frames.last().and_then(|f| f.panel.as_ref())
+    }
+
+    fn panel_mut(&mut self) -> Option<&mut Panel> {
+        self.frames.last_mut().and_then(|f| f.panel.as_mut())
+    }
+
+    fn push_mode(&mut self, mode: UiMode, panel: Panel) {
+        self.frames.push(ViewFrame {
+            mode,
+            panel: Some(panel),
         });
     }
 
+    fn pop_mode(&mut self) {
+        if self.frames.len() > 1 {
+            self.frames.pop();
+        }
+    }
+
+    fn prompt(&self) -> &'static str {
+        self.mode().prompt()
+    }
+
+    fn push_entry(&mut self, kind: EntryKind, lines: Vec<String>) {
+        let entry = ScrollEntry {
+            ts: now_ts(),
+            kind,
+            lines,
+        };
+        self.log.push(entry.clone());
+        if entry.kind != EntryKind::Command {
+            self.last_result = Some(entry);
+        }
+    }
+
     fn push_command(&mut self, line: String) {
-        self.push_entry(EntryKind::Command, vec![line]);
+        self.last_command = Some(line.clone());
+        self.log.push(ScrollEntry {
+            ts: now_ts(),
+            kind: EntryKind::Command,
+            lines: vec![line],
+        });
     }
 
     fn push_output(&mut self, lines: Vec<String>) {
@@ -475,19 +626,8 @@ impl App {
         self.push_entry(EntryKind::Error, vec![msg]);
     }
 
-    fn set_panel(&mut self, title: &str, lines: Vec<String>) {
-        self.panel = Some(Panel::Status {
-            title: title.to_string(),
-            updated_at: now_ts(),
-            lines,
-        });
-    }
-
-    fn clear_panel(&mut self) {
-        self.panel = None;
-    }
-
     fn recompute_suggestions(&mut self) {
+        let forced_root = self.input.buf.trim_start().starts_with('/');
         let q = self.input.buf.trim_start_matches('/').trim().to_lowercase();
         if q.is_empty() {
             self.suggestions.clear();
@@ -503,7 +643,11 @@ impl App {
             return;
         }
 
-        let mut defs = command_defs();
+        let mut defs = if forced_root {
+            command_defs()
+        } else {
+            mode_command_defs(self.mode())
+        };
         defs.sort_by(|a, b| a.name.cmp(b.name));
 
         let mut scored = Vec::new();
@@ -526,11 +670,13 @@ impl App {
         if self.suggestions.is_empty() {
             return;
         }
+        let forced_root = self.input.buf.trim_start().starts_with('/');
         let sel = self
             .suggestion_selected
             .min(self.suggestions.len().saturating_sub(1));
         let cmd = self.suggestions[sel].name;
 
+        let prefix = if forced_root { "/" } else { "" };
         let raw = self.input.buf.trim_start_matches('/');
         let trimmed = raw.trim_start();
         let mut iter = trimmed.splitn(2, char::is_whitespace);
@@ -538,13 +684,14 @@ impl App {
         let rest = iter.next().unwrap_or("");
 
         if first.is_empty() {
-            self.input.set(format!("{} ", cmd));
+            self.input.set(format!("{}{} ", prefix, cmd));
         } else {
             // Replace first token.
             if rest.is_empty() {
-                self.input.set(format!("{} ", cmd));
+                self.input.set(format!("{}{} ", prefix, cmd));
             } else {
-                self.input.set(format!("{} {}", cmd, rest.trim_start()));
+                self.input
+                    .set(format!("{}{} {}", prefix, cmd, rest.trim_start()));
             }
         }
         self.recompute_suggestions();
@@ -556,13 +703,15 @@ impl App {
             return;
         }
 
+        let forced_root = line.trim_start().starts_with('/');
+
         self.input.push_history(&line);
         self.push_command(format!("{} {}", self.prompt(), line));
         self.input.clear();
         self.suggestions.clear();
         self.suggestion_selected = 0;
 
-        let line = line.strip_prefix('/').unwrap_or(&line).trim();
+        let line = line.trim_start().strip_prefix('/').unwrap_or(&line).trim();
         let tokens = match tokenize(line) {
             Ok(t) => t,
             Err(err) => {
@@ -577,9 +726,15 @@ impl App {
         let mut cmd = tokens[0].to_lowercase();
         let args = &tokens[1..];
 
-        // Resolve aliases.
-        let mut defs = command_defs();
+        let mode = self.mode();
+        let mut defs = if forced_root || mode == UiMode::Root {
+            command_defs()
+        } else {
+            mode_command_defs(mode)
+        };
         defs.sort_by(|a, b| a.name.cmp(b.name));
+
+        // Resolve aliases.
         if let Some(d) = defs.iter().find(|d| d.name == cmd) {
             let _ = d;
         } else if let Some(d) = defs.iter().find(|d| d.aliases.iter().any(|&a| a == cmd)) {
@@ -595,16 +750,26 @@ impl App {
             }
         }
 
-        match cmd.as_str() {
-            "help" => self.cmd_help(args),
+        if cmd == "help" {
+            self.cmd_help(&defs, args);
+            return;
+        }
+
+        if forced_root || mode == UiMode::Root {
+            self.dispatch_root(cmd.as_str(), args);
+        } else {
+            self.dispatch_mode(mode, cmd.as_str(), args);
+        }
+    }
+
+    fn dispatch_root(&mut self, cmd: &str, args: &[String]) {
+        match cmd {
             "status" => self.cmd_status(args),
             "init" => self.cmd_init(args),
             "snap" => self.cmd_snap(args),
             "snaps" => self.cmd_snaps(args),
             "show" => self.cmd_show(args),
             "restore" => self.cmd_restore(args),
-
-            "panel" => self.cmd_panel(args),
 
             "remote" => self.cmd_remote(args),
             "ping" => self.cmd_ping(args),
@@ -619,13 +784,68 @@ impl App {
             "supers" => self.cmd_superpositions(args),
 
             "clear" => {
-                self.scroll.clear();
+                self.log.clear();
+                self.last_command = None;
+                self.last_result = None;
             }
             "quit" => {
                 self.quit = true;
             }
             _ => {
                 self.push_error(format!("unknown command: {}", cmd));
+            }
+        }
+    }
+
+    fn dispatch_global(&mut self, cmd: &str, _args: &[String]) -> bool {
+        match cmd {
+            "ping" => {
+                self.cmd_ping(&[]);
+                true
+            }
+            "quit" => {
+                self.quit = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn dispatch_mode(&mut self, mode: UiMode, cmd: &str, args: &[String]) {
+        match mode {
+            UiMode::Snaps => match cmd {
+                "back" => {
+                    self.pop_mode();
+                    self.push_output(vec!["back".to_string()]);
+                }
+                "open" => self.cmd_snaps_open(args),
+                "show" => self.cmd_snaps_show(args),
+                "restore" => self.cmd_snaps_restore(args),
+                _ => {
+                    if !self.dispatch_global(cmd, args) {
+                        self.push_error(format!(
+                            "unknown command in {:?} mode: {} (try /help)",
+                            mode, cmd
+                        ));
+                    }
+                }
+            },
+            UiMode::Inbox | UiMode::Bundles | UiMode::Superpositions => match cmd {
+                "back" => {
+                    self.pop_mode();
+                    self.push_output(vec!["back".to_string()]);
+                }
+                _ => {
+                    if !self.dispatch_global(cmd, args) {
+                        self.push_error(format!(
+                            "unknown command in {:?} mode: {} (try /help)",
+                            mode, cmd
+                        ));
+                    }
+                }
+            },
+            UiMode::Root => {
+                self.dispatch_root(cmd, args);
             }
         }
     }
@@ -644,20 +864,19 @@ impl App {
         }
     }
 
-    fn cmd_help(&mut self, args: &[String]) {
-        let defs = command_defs();
+    fn cmd_help(&mut self, defs: &[CommandDef], args: &[String]) {
         if args.is_empty() {
             let mut lines = Vec::new();
             lines.push("Commands:".to_string());
-            let mut defs = defs;
+            let mut defs = defs.to_vec();
             defs.sort_by(|a, b| a.name.cmp(b.name));
             for d in defs {
                 lines.push(format!("- {:<10} {}", d.name, d.help));
             }
             lines.push("".to_string());
             lines.push("Notes:".to_string());
-            lines.push("- Leading `/` is optional; it forces command mode.".to_string());
-            lines.push("- Tab toggles Local/Remote mode only when input is empty.".to_string());
+            lines.push("- `Esc` goes back (or clears input).".to_string());
+            lines.push("- Prefix with `/` to force root commands.".to_string());
             self.push_output(lines);
             return;
         }
@@ -721,7 +940,7 @@ impl App {
         };
 
         let mut lines = Vec::new();
-        lines.push(format!("mode: {:?}", self.mode));
+        lines.push(format!("view: {:?}", self.mode()));
         lines.push(format!("workspace: {}", ws.root.display()));
         lines.push(format!(
             "remote: {}",
@@ -735,8 +954,7 @@ impl App {
         if let Some(s) = snaps.first() {
             lines.push(format!("latest: {} {}", s.id, s.created_at));
         }
-        self.push_output(lines.clone());
-        self.set_panel("Status", lines);
+        self.push_output(lines);
     }
 
     fn cmd_init(&mut self, args: &[String]) {
@@ -839,29 +1057,146 @@ impl App {
 
         match ws.list_snaps() {
             Ok(snaps) => {
-                let mut lines = Vec::new();
-                let snaps = if let Some(n) = limit {
+                let items = if let Some(n) = limit {
                     snaps.into_iter().take(n).collect::<Vec<_>>()
                 } else {
                     snaps
                 };
-                for s in snaps {
-                    let short = s.id.chars().take(8).collect::<String>();
-                    let msg = s.message.unwrap_or_default();
-                    if msg.is_empty() {
-                        lines.push(format!("{} {}", short, s.created_at));
-                    } else {
-                        lines.push(format!("{} {} {}", short, s.created_at, msg));
-                    }
-                }
-                if lines.is_empty() {
-                    lines.push("(no snaps)".to_string());
-                }
-                self.push_output(lines);
+
+                self.push_mode(
+                    UiMode::Snaps,
+                    Panel::Snaps {
+                        title: "Snaps".to_string(),
+                        updated_at: now_ts(),
+                        filter: None,
+                        items,
+                        selected: 0,
+                    },
+                );
+                self.push_output(vec!["opened snaps".to_string()]);
             }
             Err(err) => {
                 self.push_error(format!("snaps: {:#}", err));
             }
+        }
+    }
+
+    fn cmd_snaps_open(&mut self, args: &[String]) {
+        if args.len() != 1 {
+            self.push_error("usage: open <snap_id_prefix>".to_string());
+            return;
+        }
+
+        let q = args[0].to_lowercase();
+
+        let selected_id = {
+            let Some(Panel::Snaps {
+                items,
+                selected,
+                updated_at,
+                ..
+            }) = self.panel_mut()
+            else {
+                self.push_error("not in snaps mode".to_string());
+                return;
+            };
+
+            let mut found = None;
+            for (i, s) in items.iter().enumerate() {
+                if s.id.to_lowercase().starts_with(&q) {
+                    found = Some(i);
+                    break;
+                }
+            }
+
+            let Some(i) = found else {
+                self.push_error(format!("no snap matches {}", args[0]));
+                return;
+            };
+
+            *selected = i;
+            *updated_at = now_ts();
+            items[i].id.clone()
+        };
+
+        self.push_output(vec![format!("selected {}", selected_id)]);
+    }
+
+    fn cmd_snaps_show(&mut self, args: &[String]) {
+        if !args.is_empty() {
+            self.push_error("usage: show".to_string());
+            return;
+        }
+
+        let Some(Panel::Snaps {
+            items, selected, ..
+        }) = self.panel()
+        else {
+            self.push_error("not in snaps mode".to_string());
+            return;
+        };
+
+        if items.is_empty() {
+            self.push_error("(no snaps)".to_string());
+            return;
+        }
+
+        let idx = (*selected).min(items.len().saturating_sub(1));
+        let s = &items[idx];
+        let mut lines = Vec::new();
+        lines.push(format!("id: {}", s.id));
+        lines.push(format!("created_at: {}", s.created_at));
+        if let Some(msg) = &s.message
+            && !msg.is_empty()
+        {
+            lines.push(format!("message: {}", msg));
+        }
+        lines.push(format!("root_manifest: {}", s.root_manifest.as_str()));
+        lines.push(format!(
+            "stats: files={} dirs={} symlinks={} bytes={}",
+            s.stats.files, s.stats.dirs, s.stats.symlinks, s.stats.bytes
+        ));
+        self.push_output(lines);
+    }
+
+    fn cmd_snaps_restore(&mut self, args: &[String]) {
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+
+        let mut snap_id: Option<String> = None;
+        let mut force = false;
+        for a in args {
+            if a == "--force" {
+                force = true;
+                continue;
+            }
+            if snap_id.is_none() {
+                snap_id = Some(a.clone());
+                continue;
+            }
+            self.push_error(format!("unknown arg: {}", a));
+            return;
+        }
+
+        if snap_id.is_none()
+            && let Some(Panel::Snaps {
+                items, selected, ..
+            }) = self.panel()
+            && !items.is_empty()
+        {
+            let idx = (*selected).min(items.len().saturating_sub(1));
+            snap_id = Some(items[idx].id.clone());
+        }
+
+        let Some(snap_id) = snap_id else {
+            self.push_error("usage: restore [<snap_id_prefix>] [--force]".to_string());
+            return;
+        };
+
+        match ws.restore_snap(&snap_id, force) {
+            Ok(()) => self.push_output(vec![format!("restored {}", snap_id)]),
+            Err(err) => self.push_error(format!("restore: {:#}", err)),
         }
     }
 
@@ -928,29 +1263,6 @@ impl App {
         match ws.restore_snap(&snap_id, force) {
             Ok(()) => self.push_output(vec![format!("restored {}", snap_id)]),
             Err(err) => self.push_error(format!("restore: {:#}", err)),
-        }
-    }
-
-    fn cmd_panel(&mut self, args: &[String]) {
-        let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
-        match sub {
-            "show" => {
-                if let Some(p) = &self.panel {
-                    self.push_output(vec![
-                        format!("panel: {}", p.title()),
-                        format!("updated_at: {}", p.updated_at()),
-                    ]);
-                } else {
-                    self.push_output(vec!["(no panel)".to_string()]);
-                }
-            }
-            "close" => {
-                self.clear_panel();
-                self.push_output(vec!["panel closed".to_string()]);
-            }
-            _ => {
-                self.push_error("usage: panel show|close".to_string());
-            }
         }
     }
 
@@ -1342,42 +1654,20 @@ impl App {
             pubs.truncate(n);
         }
 
-        if pubs.is_empty() {
-            let lines = vec!["(empty)".to_string()];
-            self.push_output(lines.clone());
-            self.panel = Some(Panel::Inbox {
+        let count = pubs.len();
+        self.push_mode(
+            UiMode::Inbox,
+            Panel::Inbox {
                 title: "Inbox".to_string(),
                 updated_at: now_ts(),
                 scope,
                 gate,
                 filter,
-                items: Vec::new(),
+                items: pubs,
                 selected: 0,
-            });
-            return;
-        }
-
-        let mut lines = Vec::new();
-        for p in &pubs {
-            let sid = p.snap_id.chars().take(8).collect::<String>();
-            let rid = p.id.chars().take(8).collect::<String>();
-            let res = if p.resolution.is_some() {
-                " resolved"
-            } else {
-                ""
-            };
-            lines.push(format!("{} {} {}{}", rid, sid, p.created_at, res));
-        }
-        self.push_output(lines);
-        self.panel = Some(Panel::Inbox {
-            title: "Inbox".to_string(),
-            updated_at: now_ts(),
-            scope,
-            gate,
-            filter,
-            items: pubs,
-            selected: 0,
-        });
+            },
+        );
+        self.push_output(vec![format!("opened inbox ({} items)", count)]);
     }
 
     fn cmd_bundles(&mut self, args: &[String]) {
@@ -1481,46 +1771,20 @@ impl App {
             bundles.truncate(n);
         }
 
-        if bundles.is_empty() {
-            let lines = vec!["(empty)".to_string()];
-            self.push_output(lines.clone());
-            self.panel = Some(Panel::Bundles {
+        let count = bundles.len();
+        self.push_mode(
+            UiMode::Bundles,
+            Panel::Bundles {
                 title: "Bundles".to_string(),
                 updated_at: now_ts(),
                 scope,
                 gate,
                 filter,
-                items: Vec::new(),
+                items: bundles,
                 selected: 0,
-            });
-            return;
-        }
-
-        let mut lines = Vec::new();
-        for b in &bundles {
-            let bid = b.id.chars().take(8).collect::<String>();
-            let tag = if b.promotable {
-                "promotable"
-            } else {
-                "blocked"
-            };
-            let reasons = if b.reasons.is_empty() {
-                "".to_string()
-            } else {
-                format!(" ({})", b.reasons.join(","))
-            };
-            lines.push(format!("{} {} {}{}", bid, b.created_at, tag, reasons));
-        }
-        self.push_output(lines);
-        self.panel = Some(Panel::Bundles {
-            title: "Bundles".to_string(),
-            updated_at: now_ts(),
-            scope,
-            gate,
-            filter,
-            items: bundles,
-            selected: 0,
-        });
+            },
+        );
+        self.push_output(vec![format!("opened bundles ({} items)", count)]);
     }
 
     fn cmd_bundle(&mut self, args: &[String]) {
@@ -1804,10 +2068,10 @@ impl App {
             items.retain(|(p, _)| p.to_lowercase().contains(q));
         }
 
-        if items.is_empty() {
-            let lines = vec!["(no superpositions)".to_string()];
-            self.push_output(lines.clone());
-            self.panel = Some(Panel::Superpositions {
+        let count = items.len();
+        self.push_mode(
+            UiMode::Superpositions,
+            Panel::Superpositions {
                 title: "Superpositions".to_string(),
                 updated_at: now_ts(),
                 bundle_id,
@@ -1816,28 +2080,11 @@ impl App {
                 variants,
                 decisions,
                 validation,
-                items: Vec::new(),
+                items,
                 selected: 0,
-            });
-            return;
-        }
-        let mut lines = Vec::new();
-        for (p, n) in &items {
-            lines.push(format!("{} (variants: {})", p, n));
-        }
-        self.push_output(lines);
-        self.panel = Some(Panel::Superpositions {
-            title: "Superpositions".to_string(),
-            updated_at: now_ts(),
-            bundle_id,
-            filter,
-            root_manifest: root,
-            variants,
-            decisions,
-            validation,
-            items,
-            selected: 0,
-        });
+            },
+        );
+        self.push_output(vec![format!("opened superpositions ({} paths)", count)]);
     }
 }
 
@@ -1926,22 +2173,16 @@ fn handle_key(app: &mut App, key: KeyEvent) {
             if !app.input.buf.is_empty() {
                 app.input.clear();
                 app.recompute_suggestions();
-            } else if app.panel.is_some() {
-                app.clear_panel();
-                app.push_output(vec!["panel closed".to_string()]);
+            } else if app.mode() != UiMode::Root {
+                app.pop_mode();
+                app.push_output(vec![format!("back to {:?}", app.mode())]);
             } else {
                 app.quit = true;
             }
         }
 
         KeyCode::Tab => {
-            if app.input.buf.is_empty() {
-                app.mode = match app.mode {
-                    Mode::Local => Mode::Remote,
-                    Mode::Remote => Mode::Local,
-                };
-                app.push_output(vec![format!("switched to {:?} mode", app.mode)]);
-            } else if !app.suggestions.is_empty() {
+            if !app.input.buf.is_empty() && !app.suggestions.is_empty() {
                 app.suggestion_selected =
                     (app.suggestion_selected + 1) % app.suggestions.len().max(1);
                 app.apply_selected_suggestion();
@@ -1949,44 +2190,15 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Enter => {
-            if app.input.buf.is_empty()
-                && let Some(p) = &app.panel
-                && let Some(idx) = p.selected()
-            {
-                match p {
-                    Panel::Inbox { items, .. } => {
-                        let id = &items[idx].id;
-                        app.input.set(format!("bundle --publication {} ", id));
-                        app.recompute_suggestions();
-                        return;
-                    }
-                    Panel::Bundles { items, .. } => {
-                        let id = &items[idx].id;
-                        app.input.set(format!("superpositions --bundle-id {} ", id));
-                        app.recompute_suggestions();
-                        return;
-                    }
-                    Panel::Superpositions {
-                        bundle_id, items, ..
-                    } => {
-                        let (path, _) = &items[idx];
-                        app.input.set(format!(
-                            "resolve pick --bundle-id {} --path \"{}\" --variant 1 ",
-                            bundle_id, path
-                        ));
-                        app.recompute_suggestions();
-                        return;
-                    }
-                    Panel::Status { .. } => {}
-                }
+            if app.input.buf.is_empty() {
+                return;
             }
-
             app.run_current_input();
         }
 
         KeyCode::Up => {
             if app.input.buf.is_empty()
-                && let Some(p) = &mut app.panel
+                && let Some(p) = app.panel_mut()
             {
                 p.move_up();
                 return;
@@ -1996,7 +2208,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Down => {
             if app.input.buf.is_empty()
-                && let Some(p) = &mut app.panel
+                && let Some(p) = app.panel_mut()
             {
                 p.move_down();
                 return;
@@ -2038,10 +2250,11 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char(c)
             if key.modifiers.contains(KeyModifiers::ALT) && app.input.buf.is_empty() =>
         {
-            let selected = app.panel.as_ref().and_then(|p| p.selected());
+            let selected = app.panel().and_then(|p| p.selected());
             if let Some(idx) = selected {
-                let is_superpositions =
-                    matches!(app.panel.as_ref(), Some(Panel::Superpositions { .. }));
+                let is_superpositions = app
+                    .panel()
+                    .is_some_and(|p| matches!(p, Panel::Superpositions { .. }));
 
                 if is_superpositions {
                     if c.is_ascii_digit() {
@@ -2065,57 +2278,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
                         return;
                     }
                 }
-
-                let p = app.panel.as_ref().expect("panel exists if selected exists");
-
-                let mut prefill = None;
-                match (p, c) {
-                    (Panel::Inbox { items, .. }, 'b') => {
-                        prefill = Some(format!("bundle --publication {} ", items[idx].id));
-                    }
-                    (Panel::Bundles { items, .. }, 'a') => {
-                        prefill = Some(format!("approve --bundle-id {} ", items[idx].id));
-                    }
-                    (Panel::Bundles { items, .. }, 'p') => {
-                        prefill = Some(format!("promote --bundle-id {} ", items[idx].id));
-                    }
-                    (Panel::Bundles { items, .. }, 's') => {
-                        prefill = Some(format!("superpositions --bundle-id {} ", items[idx].id));
-                    }
-                    (
-                        Panel::Superpositions {
-                            bundle_id, items, ..
-                        },
-                        'p',
-                    ) => {
-                        let (path, _) = &items[idx];
-                        prefill = Some(format!(
-                            "resolve pick --bundle-id {} --path \"{}\" --variant 1 ",
-                            bundle_id, path
-                        ));
-                    }
-                    (Panel::Superpositions { bundle_id, .. }, 'i') => {
-                        prefill = Some(format!("resolve init --bundle-id {} ", bundle_id));
-                    }
-                    (Panel::Superpositions { bundle_id, .. }, 'v') => {
-                        prefill = Some(format!("resolve validate --bundle-id {} ", bundle_id));
-                    }
-                    (Panel::Superpositions { bundle_id, .. }, 'a') => {
-                        prefill = Some(format!("resolve apply --bundle-id {} ", bundle_id));
-                    }
-                    (Panel::Superpositions { bundle_id, .. }, 'u') => {
-                        prefill = Some(format!(
-                            "resolve apply --bundle-id {} --publish ",
-                            bundle_id
-                        ));
-                    }
-                    _ => {}
-                }
-
-                if let Some(prefill) = prefill {
-                    app.input.set(prefill);
-                    app.recompute_suggestions();
-                }
+                let _ = idx;
             }
         }
 
@@ -2133,7 +2296,7 @@ fn superpositions_clear_decision(app: &mut App) {
         return;
     };
 
-    let (bundle_id, root_manifest, path) = match app.panel.as_ref() {
+    let (bundle_id, root_manifest, path) = match app.panel() {
         Some(Panel::Superpositions {
             bundle_id,
             root_manifest,
@@ -2192,7 +2355,7 @@ fn superpositions_clear_decision(app: &mut App) {
             validation,
             updated_at,
             ..
-        }) = app.panel.as_mut()
+        }) = app.panel_mut()
         else {
             return;
         };
@@ -2210,7 +2373,7 @@ fn superpositions_pick_variant(app: &mut App, variant_index: usize) {
         return;
     };
 
-    let (bundle_id, root_manifest, path, key, variants_len) = match app.panel.as_ref() {
+    let (bundle_id, root_manifest, path, key, variants_len) = match app.panel() {
         Some(Panel::Superpositions {
             bundle_id,
             root_manifest,
@@ -2286,7 +2449,7 @@ fn superpositions_pick_variant(app: &mut App, variant_index: usize) {
             validation,
             updated_at,
             ..
-        }) = app.panel.as_mut()
+        }) = app.panel_mut()
         else {
             return;
         };
@@ -2305,7 +2468,7 @@ fn superpositions_pick_variant(app: &mut App, variant_index: usize) {
 }
 
 fn superpositions_jump_next_missing(app: &mut App) {
-    let next = match app.panel.as_ref() {
+    let next = match app.panel() {
         Some(Panel::Superpositions {
             items,
             selected,
@@ -2334,7 +2497,7 @@ fn superpositions_jump_next_missing(app: &mut App) {
             selected,
             updated_at,
             ..
-        }) = app.panel.as_mut()
+        }) = app.panel_mut()
         {
             *selected = idx;
             *updated_at = now_ts();
@@ -2346,7 +2509,7 @@ fn superpositions_jump_next_missing(app: &mut App) {
 }
 
 fn superpositions_jump_next_invalid(app: &mut App) {
-    let next = match app.panel.as_ref() {
+    let next = match app.panel() {
         Some(Panel::Superpositions {
             items,
             selected,
@@ -2388,7 +2551,7 @@ fn superpositions_jump_next_invalid(app: &mut App) {
             selected,
             updated_at,
             ..
-        }) = app.panel.as_mut()
+        }) = app.panel_mut()
         {
             *selected = idx;
             *updated_at = now_ts();
@@ -2406,6 +2569,7 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
         .constraints([
             Constraint::Length(2),
             Constraint::Min(0),
+            Constraint::Length(3),
             Constraint::Length(if app.suggestions.is_empty() { 0 } else { 6 }),
             Constraint::Length(3),
         ])
@@ -2432,61 +2596,60 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
     .block(Block::default().borders(Borders::BOTTOM));
     frame.render_widget(header, chunks[0]);
 
-    // Main area: scrollback + optional panel
-    let (scroll_area, panel_area) = if app.panel.is_some() {
-        let cols = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
-            .split(chunks[1]);
-        (cols[0], Some(cols[1]))
+    // Main view (modal)
+    if let Some(p) = app.panel() {
+        draw_panel(frame, app, p, chunks[1]);
     } else {
-        (chunks[1], None)
-    };
+        let lines = vec![
+            Line::from(Span::styled("Root", Style::default().fg(Color::Yellow))),
+            Line::from(""),
+            Line::from("Use: snaps, inbox, bundles, superpositions"),
+            Line::from("Global: help, ping, quit"),
+            Line::from("Tip: prefix with `/` to force root commands."),
+        ];
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .block(Block::default().borders(Borders::ALL).title("Root")),
+            chunks[1],
+        );
+    }
 
-    // Scrollback
-    let mut lines = Vec::new();
-    for e in &app.scroll {
-        let prefix_style = match e.kind {
-            EntryKind::Command => Style::default().fg(Color::Cyan),
-            EntryKind::Output => Style::default().fg(Color::White),
-            EntryKind::Error => Style::default().fg(Color::Red),
-        };
-        let tag = match e.kind {
-            EntryKind::Command => ">",
-            EntryKind::Output => " ",
-            EntryKind::Error => "!",
-        };
-
-        for (i, l) in e.lines.iter().enumerate() {
-            if i == 0 {
-                lines.push(Line::from(vec![
-                    Span::styled(format!("{} ", tag), prefix_style),
-                    Span::styled(format!("{} ", e.ts), Style::default().fg(Color::Gray)),
-                    Span::raw(l.as_str()),
-                ]));
-            } else {
-                lines.push(Line::from(vec![Span::raw("  "), Span::raw(l.as_str())]));
+    // Status / last result
+    {
+        let mut lines = Vec::new();
+        if let Some(cmd) = &app.last_command {
+            lines.push(Line::from(vec![
+                Span::styled("> ", Style::default().fg(Color::Cyan)),
+                Span::raw(cmd.as_str()),
+            ]));
+        }
+        if let Some(r) = &app.last_result {
+            let style = match r.kind {
+                EntryKind::Output => Style::default().fg(Color::White),
+                EntryKind::Error => Style::default().fg(Color::Red),
+                EntryKind::Command => Style::default().fg(Color::Cyan),
+            };
+            for (i, l) in r.lines.iter().enumerate() {
+                if i == 0 {
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("{} ", r.ts), Style::default().fg(Color::Gray)),
+                        Span::styled(l.as_str(), style),
+                    ]));
+                } else {
+                    lines.push(Line::from(Span::styled(l.as_str(), style)));
+                }
             }
         }
-    }
-    if lines.is_empty() {
-        lines.push(Line::from(""));
-    }
-
-    // Show the most recent lines that fit.
-    let max = chunks[1].height as usize;
-    if max > 0 && lines.len() > max {
-        lines = lines.split_off(lines.len() - max);
-    }
-
-    let body = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(Block::default().borders(Borders::NONE));
-    frame.render_widget(body, scroll_area);
-
-    // Panel
-    if let (Some(p), Some(area)) = (&app.panel, panel_area) {
-        draw_panel(frame, app, p, area);
+        if lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .block(Block::default().borders(Borders::TOP).title("Last")),
+            chunks[2],
+        );
     }
 
     // Suggestions
@@ -2513,7 +2676,7 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
         }
         let sugg =
             Paragraph::new(s_lines).block(Block::default().borders(Borders::TOP | Borders::BOTTOM));
-        frame.render_widget(sugg, chunks[2]);
+        frame.render_widget(sugg, chunks[3]);
     }
 
     // Input
@@ -2525,36 +2688,91 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
         Span::raw(buf.as_str()),
     ]);
     let input = Paragraph::new(input_line).block(Block::default().borders(Borders::TOP));
-    frame.render_widget(input, chunks[3]);
+    frame.render_widget(input, chunks[4]);
 
     // Cursor
     let x = prompt.len() as u16 + 1 + app.input.cursor as u16;
-    let y = chunks[3].y + 1;
-    frame.set_cursor_position((chunks[3].x + x, y));
+    let y = chunks[4].y + 1;
+    frame.set_cursor_position((chunks[4].x + x, y));
 }
 
-fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatui::layout::Rect) {
+fn draw_panel(frame: &mut ratatui::Frame, _app: &App, panel: &Panel, area: ratatui::layout::Rect) {
     let header = Line::from(vec![
         Span::styled(panel.title(), Style::default().fg(Color::Yellow)),
         Span::raw("  "),
         Span::styled(panel.updated_at(), Style::default().fg(Color::Gray)),
     ]);
 
-    let outer = Block::default().borders(Borders::LEFT).title(header);
+    let outer = Block::default().borders(Borders::ALL).title(header);
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
     match panel {
-        Panel::Status { lines, .. } => {
-            let mut plines = Vec::new();
-            for l in lines {
-                plines.push(Line::from(l.as_str()));
+        Panel::Snaps {
+            filter,
+            items,
+            selected,
+            ..
+        } => {
+            let parts = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+                .split(inner);
+
+            let mut state = ListState::default();
+            if !items.is_empty() {
+                state.select(Some((*selected).min(items.len().saturating_sub(1))));
             }
-            let max = inner.height as usize;
-            if max > 0 && plines.len() > max {
-                plines = plines.split_off(plines.len() - max);
+
+            let mut rows = Vec::new();
+            for s in items {
+                let sid = s.id.chars().take(8).collect::<String>();
+                let msg = s.message.clone().unwrap_or_default();
+                if msg.is_empty() {
+                    rows.push(ListItem::new(format!("{} {}", sid, s.created_at)));
+                } else {
+                    rows.push(ListItem::new(format!("{} {} {}", sid, s.created_at, msg)));
+                }
             }
-            frame.render_widget(Paragraph::new(plines).wrap(Wrap { trim: false }), inner);
+            if rows.is_empty() {
+                rows.push(ListItem::new("(no snaps)"));
+            }
+
+            let list = List::new(rows)
+                .block(Block::default().borders(Borders::BOTTOM).title(format!(
+                    "snaps{} (commands: open, show, restore, back)",
+                    filter
+                        .as_ref()
+                        .map(|f| format!(" filter={}", f))
+                        .unwrap_or_default()
+                )))
+                .highlight_style(Style::default().bg(Color::DarkGray));
+            frame.render_stateful_widget(list, parts[0], &mut state);
+
+            let details = if items.is_empty() {
+                vec![Line::from("(no selection)")]
+            } else {
+                let idx = (*selected).min(items.len().saturating_sub(1));
+                let s = &items[idx];
+                let mut out = Vec::new();
+                out.push(Line::from(format!("id: {}", s.id)));
+                out.push(Line::from(format!("created_at: {}", s.created_at)));
+                if let Some(msg) = &s.message
+                    && !msg.is_empty()
+                {
+                    out.push(Line::from(format!("message: {}", msg)));
+                }
+                out.push(Line::from(format!(
+                    "root_manifest: {}",
+                    s.root_manifest.as_str()
+                )));
+                out.push(Line::from(format!(
+                    "stats: files={} dirs={} symlinks={} bytes={}",
+                    s.stats.files, s.stats.dirs, s.stats.symlinks, s.stats.bytes
+                )));
+                out
+            };
+            frame.render_widget(Paragraph::new(details).wrap(Wrap { trim: false }), parts[1]);
         }
 
         Panel::Inbox {
@@ -2592,7 +2810,7 @@ fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatu
 
             let list = List::new(rows)
                 .block(Block::default().borders(Borders::BOTTOM).title(format!(
-                    "scope={} gate={}{} (Enter: bundle, Alt+b: bundle)",
+                    "scope={} gate={}{}",
                     scope,
                     gate,
                     filter
@@ -2657,7 +2875,7 @@ fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatu
 
             let list = List::new(rows)
                 .block(Block::default().borders(Borders::BOTTOM).title(format!(
-                    "scope={} gate={}{} (Enter: superpositions, Alt+a approve, Alt+p promote)",
+                    "scope={} gate={}{}",
                     scope,
                     gate,
                     filter
@@ -2846,10 +3064,5 @@ fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatu
             };
             frame.render_widget(Paragraph::new(details).wrap(Wrap { trim: false }), parts[1]);
         }
-    }
-
-    // Help footer within panel when input is empty.
-    if app.input.buf.is_empty() {
-        let _ = app;
     }
 }

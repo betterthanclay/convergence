@@ -1,10 +1,12 @@
 # Phase 012: TUI Command Shell (Local-First)
 
+Status: implemented as an intermediate step. The global command input remains, but later phases will shift away from an open-ended scrollback UI toward modal, view-driven screens.
+
 ## Goal
 
 Make the TUI useful without any remote configuration or connectivity.
 
-The TUI becomes a local-first command shell (Opencode-style) with a global input line, scrollback, command history, and lightweight autocomplete.
+The TUI becomes a local-first command shell with a global input line, command history, and lightweight autocomplete.
 
 ## Scope
 
