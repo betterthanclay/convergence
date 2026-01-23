@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::io::{self, IsTerminal};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -21,6 +21,10 @@ use crate::store::LocalStore;
 use crate::workspace::Workspace;
 
 pub fn run() -> Result<()> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        anyhow::bail!("TUI requires an interactive terminal (TTY)");
+    }
+
     let mut stdout = io::stdout();
     enable_raw_mode().context("enable raw mode")?;
     execute!(stdout, EnterAlternateScreen).context("enter alternate screen")?;
