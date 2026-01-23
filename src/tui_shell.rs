@@ -16,9 +16,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::block::BorderType;
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::model::{ObjectId, RemoteConfig, Resolution, ResolutionDecision};
+use crate::model::{
+    Manifest, ManifestEntryKind, ObjectId, RemoteConfig, Resolution, ResolutionDecision,
+};
 use crate::remote::RemoteClient;
 use crate::resolve::{ResolutionValidation, superposition_variants, validate_resolution};
+use crate::store::LocalStore;
 use crate::workspace::Workspace;
 
 pub fn run() -> Result<()> {
@@ -148,6 +151,8 @@ fn render_view_chrome(
 struct RootView {
     updated_at: String,
     ctx: RootContext,
+    scroll: usize,
+    status_lines: Vec<String>,
 }
 
 impl RootView {
@@ -155,7 +160,25 @@ impl RootView {
         Self {
             updated_at: now_ts(),
             ctx,
+            scroll: 0,
+            status_lines: Vec::new(),
         }
+    }
+
+    fn refresh(&mut self, ws: Option<&Workspace>) {
+        let lines = match (self.ctx, ws) {
+            (_, None) => vec!["No workspace".to_string()],
+            (RootContext::Local, Some(ws)) => {
+                local_status_lines(ws).unwrap_or_else(|e| vec![format!("status: {:#}", e)])
+            }
+            (RootContext::Remote, Some(ws)) => {
+                remote_status_lines(ws).unwrap_or_else(|e| vec![format!("status: {:#}", e)])
+            }
+        };
+
+        self.status_lines = lines;
+        self.updated_at = now_ts();
+        self.scroll = 0;
     }
 }
 
@@ -180,25 +203,50 @@ impl View for RootView {
         &self.updated_at
     }
 
+    fn move_up(&mut self) {
+        self.scroll = self.scroll.saturating_sub(1);
+    }
+
+    fn move_down(&mut self) {
+        if self.scroll < self.status_lines.len().saturating_sub(1) {
+            self.scroll += 1;
+        }
+    }
+
     fn render(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         let inner = render_view_chrome(frame, self.title(), self.updated_at(), area);
 
-        let primary = match self.ctx {
-            RootContext::Local => "Local: status, init, snap, snaps, show, restore",
-            RootContext::Remote => {
-                "Remote: remote, ping, publish, fetch, inbox, bundles, superpositions"
-            }
-        };
+        let parts = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(3)])
+            .split(inner);
 
-        let lines = vec![
-            Line::from(""),
-            Line::from(primary),
-            Line::from("Global: help, quit"),
-            Line::from("Tab: toggle local/remote"),
-            Line::from("Nav: Esc back/clear, Up/Down select"),
-            Line::from("Tip: prefix with `/` to force root commands."),
+        let mut lines = Vec::new();
+        for s in &self.status_lines {
+            lines.push(Line::from(s.as_str()));
+        }
+        if lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+
+        let scroll = self.scroll.min(lines.len().saturating_sub(1)) as u16;
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .scroll((scroll, 0)),
+            parts[0],
+        );
+
+        let footer = vec![
+            Line::from("Commands: status/refresh, help"),
+            Line::from("Tab toggles local/remote; Up/Down scroll"),
         ];
-        frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+        frame.render_widget(
+            Paragraph::new(footer)
+                .wrap(Wrap { trim: false })
+                .block(Block::default().borders(Borders::TOP)),
+            parts[1],
+        );
     }
 }
 
@@ -839,7 +887,13 @@ fn local_root_command_defs() -> Vec<CommandDef> {
             name: "status",
             aliases: &["st"],
             usage: "status",
-            help: "Show workspace status",
+            help: "Show filesystem status (since latest snap)",
+        },
+        CommandDef {
+            name: "refresh",
+            aliases: &["r"],
+            usage: "refresh",
+            help: "Refresh root status view",
         },
         CommandDef {
             name: "init",
@@ -884,6 +938,18 @@ fn local_root_command_defs() -> Vec<CommandDef> {
 fn remote_root_command_defs() -> Vec<CommandDef> {
     let mut out = global_command_defs();
     out.extend(vec![
+        CommandDef {
+            name: "status",
+            aliases: &["st"],
+            usage: "status",
+            help: "Show remote status",
+        },
+        CommandDef {
+            name: "refresh",
+            aliases: &["r"],
+            usage: "refresh",
+            help: "Refresh root status view",
+        },
         CommandDef {
             name: "remote",
             aliases: &[],
@@ -1192,6 +1258,8 @@ impl App {
             }
         }
 
+        app.refresh_root_view();
+
         app.push_output(vec![
             "Type `help` for commands.".to_string(),
             "(Use `Esc` to go back; prefix with `/` to force root commands.)".to_string(),
@@ -1242,6 +1310,10 @@ impl App {
         if self.frames.len() > 1 {
             self.frames.pop();
         }
+
+        if self.mode() == UiMode::Root {
+            self.refresh_root_view();
+        }
     }
 
     fn prompt(&self) -> &'static str {
@@ -1263,6 +1335,17 @@ impl App {
         {
             v.ctx = next;
             v.updated_at = now_ts();
+        }
+
+        self.refresh_root_view();
+    }
+
+    fn refresh_root_view(&mut self) {
+        let ws = self.workspace.clone();
+        let ctx = self.root_ctx;
+        if let Some(v) = self.current_view_mut::<RootView>() {
+            v.ctx = ctx;
+            v.refresh(ws.as_ref());
         }
     }
 
@@ -1447,6 +1530,11 @@ impl App {
         match self.root_ctx {
             RootContext::Local => match cmd {
                 "status" => self.cmd_status(args),
+                "refresh" | "r" => {
+                    let _ = args;
+                    self.refresh_root_view();
+                    self.push_output(vec!["refreshed".to_string()]);
+                }
                 "init" => self.cmd_init(args),
                 "snap" => self.cmd_snap(args),
                 "snaps" => self.cmd_snaps(args),
@@ -1472,6 +1560,12 @@ impl App {
                 }
             },
             RootContext::Remote => match cmd {
+                "status" => self.cmd_status(args),
+                "refresh" | "r" => {
+                    let _ = args;
+                    self.refresh_root_view();
+                    self.push_output(vec!["refreshed".to_string()]);
+                }
                 "remote" => self.cmd_remote(args),
                 "ping" => self.cmd_ping(args),
                 "publish" => self.cmd_publish(args),
@@ -1493,7 +1587,7 @@ impl App {
                     self.quit = true;
                 }
 
-                "status" | "init" | "snap" | "snaps" | "show" | "restore" => {
+                "init" | "snap" | "snaps" | "show" | "restore" => {
                     self.push_error("local command; press Tab to switch to local".to_string());
                 }
 
@@ -1624,6 +1718,7 @@ impl App {
             lines.push("- History: Ctrl+p / Ctrl+n.".to_string());
             lines.push("- At root: Tab toggles local/remote.".to_string());
             lines.push("- Prefix with `/` to force root commands.".to_string());
+            lines.push("- Root view: use `refresh` (or `status`) to recompute.".to_string());
             self.open_modal("Help", lines);
             return;
         }
@@ -1671,41 +1766,12 @@ impl App {
     }
 
     fn cmd_status(&mut self, _args: &[String]) {
-        let Some(ws) = self.require_workspace() else {
-            return;
-        };
-        let cfg = match ws.store.read_config() {
-            Ok(c) => c,
-            Err(err) => {
-                self.push_error(format!("read config: {:#}", err));
-                return;
-            }
-        };
-
-        let snaps = match ws.list_snaps() {
-            Ok(s) => s,
-            Err(err) => {
-                self.push_error(format!("list snaps: {:#}", err));
-                return;
-            }
-        };
-
-        let mut lines = Vec::new();
-        lines.push(format!("view: {:?}", self.mode()));
-        lines.push(format!("workspace: {}", ws.root.display()));
-        lines.push(format!(
-            "remote: {}",
-            if cfg.remote.is_some() {
-                "configured"
-            } else {
-                "not configured"
-            }
-        ));
-        lines.push(format!("snaps: {}", snaps.len()));
-        if let Some(s) = snaps.first() {
-            lines.push(format!("latest: {} {}", s.id, s.created_at));
+        self.refresh_root_view();
+        if self.mode() == UiMode::Root {
+            self.push_output(vec!["refreshed".to_string()]);
+        } else {
+            self.push_output(vec!["status is shown in root view (Esc)".to_string()]);
         }
-        self.push_output(lines);
     }
 
     fn cmd_init(&mut self, args: &[String]) {
@@ -1733,6 +1799,7 @@ impl App {
                 self.workspace = Some(ws);
                 self.workspace_err = None;
                 self.push_output(vec!["initialized .converge".to_string()]);
+                self.refresh_root_view();
             }
             Err(err) => {
                 self.push_error(format!("init: {:#}", err));
@@ -1768,6 +1835,7 @@ impl App {
         match ws.create_snap(message) {
             Ok(snap) => {
                 self.push_output(vec![format!("snap {}", snap.id)]);
+                self.refresh_root_view();
             }
             Err(err) => {
                 self.push_error(format!("snap: {:#}", err));
@@ -2022,7 +2090,10 @@ impl App {
         };
 
         match ws.restore_snap(&snap_id, force) {
-            Ok(()) => self.push_output(vec![format!("restored {}", snap_id)]),
+            Ok(()) => {
+                self.push_output(vec![format!("restored {}", snap_id)]);
+                self.refresh_root_view();
+            }
             Err(err) => self.push_error(format!("restore: {:#}", err)),
         }
     }
@@ -2494,6 +2565,7 @@ impl App {
         }
 
         self.push_output(vec!["remote configured".to_string()]);
+        self.refresh_root_view();
     }
 
     fn cmd_remote_unset(&mut self, args: &[String]) {
@@ -2516,6 +2588,7 @@ impl App {
             return;
         }
         self.push_output(vec!["remote unset".to_string()]);
+        self.refresh_root_view();
     }
 
     fn cmd_ping(&mut self, _args: &[String]) {
@@ -2625,6 +2698,7 @@ impl App {
         match client.publish_snap(&ws.store, &snap, &scope, &gate) {
             Ok(p) => {
                 self.push_output(vec![format!("published {}", p.id)]);
+                self.refresh_root_view();
             }
             Err(err) => {
                 self.push_error(format!("publish: {:#}", err));
@@ -2664,6 +2738,7 @@ impl App {
         match client.fetch_publications(&ws.store, snap_id.as_deref()) {
             Ok(fetched) => {
                 self.push_output(vec![format!("fetched {} snaps", fetched.len())]);
+                self.refresh_root_view();
             }
             Err(err) => {
                 self.push_error(format!("fetch: {:#}", err));
@@ -3310,6 +3385,19 @@ fn handle_key(app: &mut App, key: KeyEvent) {
             if app.input.buf.is_empty() {
                 return;
             }
+
+            if !app.suggestions.is_empty() {
+                let sel = app
+                    .suggestion_selected
+                    .min(app.suggestions.len().saturating_sub(1));
+                let cmd = app.suggestions[sel].name;
+
+                let raw = app.input.buf.trim_start_matches('/').trim_start();
+                let first = raw.split_whitespace().next().unwrap_or("");
+                if first != cmd {
+                    app.apply_selected_suggestion();
+                }
+            }
             app.run_current_input();
         }
 
@@ -3649,6 +3737,325 @@ fn superpositions_jump_next_invalid(app: &mut App) {
     } else {
         app.push_output(vec!["no invalid decisions".to_string()]);
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StatusDelta {
+    Added,
+    Modified,
+    Deleted,
+}
+
+impl StatusDelta {
+    fn tag(self) -> &'static str {
+        match self {
+            StatusDelta::Added => "A",
+            StatusDelta::Modified => "M",
+            StatusDelta::Deleted => "D",
+        }
+    }
+}
+
+fn local_status_lines(ws: &Workspace) -> Result<Vec<String>> {
+    let snaps = ws.list_snaps()?;
+    let latest = snaps.first();
+
+    let (cur_root, cur_manifests, _stats) = ws.current_manifest_tree()?;
+
+    let mut lines = Vec::new();
+    lines.push(format!("workspace: {}", ws.root.display()));
+    if let Some(s) = latest {
+        lines.push(format!("baseline: latest snap {}", s.id));
+    } else {
+        lines.push("baseline: (none; no snaps yet)".to_string());
+    }
+
+    let changes = if let Some(s) = latest {
+        if s.root_manifest == cur_root {
+            Vec::new()
+        } else {
+            diff_trees(&ws.store, Some(&s.root_manifest), &cur_root, &cur_manifests)?
+        }
+    } else {
+        // No baseline: treat everything as added.
+        let mut out = Vec::new();
+        collect_leaves_current("", &cur_root, &cur_manifests, StatusDelta::Added, &mut out)?;
+        out
+    };
+
+    if changes.is_empty() {
+        lines.push("".to_string());
+        lines.push("Clean".to_string());
+        return Ok(lines);
+    }
+
+    let mut added = 0;
+    let mut modified = 0;
+    let mut deleted = 0;
+    for (k, _) in &changes {
+        match k {
+            StatusDelta::Added => added += 1,
+            StatusDelta::Modified => modified += 1,
+            StatusDelta::Deleted => deleted += 1,
+        }
+    }
+    lines.push("".to_string());
+    lines.push(format!(
+        "changes: {} added, {} modified, {} deleted",
+        added, modified, deleted
+    ));
+    lines.push("".to_string());
+
+    const MAX: usize = 200;
+    let more = changes.len().saturating_sub(MAX);
+    for (i, (k, p)) in changes.into_iter().enumerate() {
+        if i >= MAX {
+            break;
+        }
+        lines.push(format!("{} {}", k.tag(), p));
+    }
+    if more > 0 {
+        lines.push(format!("... and {} more", more));
+    }
+
+    Ok(lines)
+}
+
+fn remote_status_lines(ws: &Workspace) -> Result<Vec<String>> {
+    let cfg = ws.store.read_config()?;
+    let Some(remote) = cfg.remote else {
+        return Ok(vec!["No remote configured".to_string()]);
+    };
+
+    let mut lines = Vec::new();
+    lines.push(format!("remote: {}", remote.base_url));
+    lines.push(format!("repo: {}", remote.repo_id));
+    lines.push(format!("scope: {}", remote.scope));
+    lines.push(format!("gate: {}", remote.gate));
+
+    // healthz
+    let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
+    let start = std::time::Instant::now();
+    match reqwest::blocking::get(&url) {
+        Ok(r) => {
+            let ms = start.elapsed().as_millis();
+            lines.push(format!("healthz: {} {}ms", r.status(), ms));
+        }
+        Err(err) => {
+            lines.push(format!("healthz: error {:#}", err));
+        }
+    }
+
+    let client = RemoteClient::new(remote.clone())?;
+    let promotion_state = client.promotion_state(&remote.scope)?;
+    lines.push("".to_string());
+    lines.push("promotion_state:".to_string());
+    if promotion_state.is_empty() {
+        lines.push("(none)".to_string());
+    } else {
+        let mut keys = promotion_state.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        for gate in keys {
+            let bid = promotion_state.get(&gate).cloned().unwrap_or_default();
+            let short = bid.chars().take(8).collect::<String>();
+            lines.push(format!("{} {}", gate, short));
+        }
+    }
+
+    let mut pubs = client.list_publications()?;
+    pubs.retain(|p| p.scope == remote.scope && p.gate == remote.gate);
+    pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    pubs.truncate(10);
+    lines.push("".to_string());
+    lines.push("publications:".to_string());
+    if pubs.is_empty() {
+        lines.push("(none)".to_string());
+    } else {
+        for p in pubs {
+            let short = p.snap_id.chars().take(8).collect::<String>();
+            let present = if ws.store.has_snap(&p.snap_id) {
+                "local"
+            } else {
+                "missing"
+            };
+            lines.push(format!(
+                "{} {} {} {} {}",
+                short, p.created_at, p.publisher, p.gate, present
+            ));
+        }
+    }
+
+    Ok(lines)
+}
+
+fn diff_trees(
+    store: &LocalStore,
+    base_root: Option<&ObjectId>,
+    cur_root: &ObjectId,
+    cur_manifests: &std::collections::HashMap<ObjectId, Manifest>,
+) -> Result<Vec<(StatusDelta, String)>> {
+    let mut out = Vec::new();
+    diff_dir("", store, base_root, cur_root, cur_manifests, &mut out)?;
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok(out)
+}
+
+fn diff_dir(
+    prefix: &str,
+    store: &LocalStore,
+    base_id: Option<&ObjectId>,
+    cur_id: &ObjectId,
+    cur_manifests: &std::collections::HashMap<ObjectId, Manifest>,
+    out: &mut Vec<(StatusDelta, String)>,
+) -> Result<()> {
+    let base_entries = if let Some(id) = base_id {
+        let m = store.get_manifest(id)?;
+        entries_by_name(&m)
+    } else {
+        std::collections::BTreeMap::new()
+    };
+
+    let cur_manifest = cur_manifests
+        .get(cur_id)
+        .ok_or_else(|| anyhow::anyhow!("missing current manifest {}", cur_id.as_str()))?;
+    let cur_entries = entries_by_name(cur_manifest);
+
+    let mut names = std::collections::BTreeSet::new();
+    for k in base_entries.keys() {
+        names.insert(k.clone());
+    }
+    for k in cur_entries.keys() {
+        names.insert(k.clone());
+    }
+
+    for name in names {
+        let b = base_entries.get(&name);
+        let c = cur_entries.get(&name);
+        let path = if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{}", prefix, name)
+        };
+
+        match (b, c) {
+            (None, Some(kind)) => match kind {
+                ManifestEntryKind::Dir { manifest } => {
+                    collect_leaves_current(
+                        &path,
+                        manifest,
+                        cur_manifests,
+                        StatusDelta::Added,
+                        out,
+                    )?;
+                }
+                _ => out.push((StatusDelta::Added, path)),
+            },
+            (Some(kind), None) => match kind {
+                ManifestEntryKind::Dir { manifest } => {
+                    collect_leaves_base(&path, store, manifest, StatusDelta::Deleted, out)?;
+                }
+                _ => out.push((StatusDelta::Deleted, path)),
+            },
+            (Some(bk), Some(ck)) => match (bk, ck) {
+                (
+                    ManifestEntryKind::File {
+                        blob: b_blob,
+                        mode: b_mode,
+                        ..
+                    },
+                    ManifestEntryKind::File {
+                        blob: c_blob,
+                        mode: c_mode,
+                        ..
+                    },
+                ) => {
+                    if b_blob != c_blob || b_mode != c_mode {
+                        out.push((StatusDelta::Modified, path));
+                    }
+                }
+                (
+                    ManifestEntryKind::Symlink { target: b_t },
+                    ManifestEntryKind::Symlink { target: c_t },
+                ) => {
+                    if b_t != c_t {
+                        out.push((StatusDelta::Modified, path));
+                    }
+                }
+                (
+                    ManifestEntryKind::Dir { manifest: b_m },
+                    ManifestEntryKind::Dir { manifest: c_m },
+                ) => {
+                    if b_m != c_m {
+                        diff_dir(&path, store, Some(b_m), c_m, cur_manifests, out)?;
+                    }
+                }
+                _ => {
+                    out.push((StatusDelta::Modified, path));
+                }
+            },
+            (None, None) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn entries_by_name(m: &Manifest) -> std::collections::BTreeMap<String, ManifestEntryKind> {
+    let mut out = std::collections::BTreeMap::new();
+    for e in &m.entries {
+        out.insert(e.name.clone(), e.kind.clone());
+    }
+    out
+}
+
+fn collect_leaves_current(
+    prefix: &str,
+    manifest_id: &ObjectId,
+    cur_manifests: &std::collections::HashMap<ObjectId, Manifest>,
+    kind: StatusDelta,
+    out: &mut Vec<(StatusDelta, String)>,
+) -> Result<()> {
+    let m = cur_manifests
+        .get(manifest_id)
+        .ok_or_else(|| anyhow::anyhow!("missing current manifest {}", manifest_id.as_str()))?;
+    for e in &m.entries {
+        let path = if prefix.is_empty() {
+            e.name.clone()
+        } else {
+            format!("{}/{}", prefix, e.name)
+        };
+        match &e.kind {
+            ManifestEntryKind::Dir { manifest } => {
+                collect_leaves_current(&path, manifest, cur_manifests, kind, out)?;
+            }
+            _ => out.push((kind, path)),
+        }
+    }
+    Ok(())
+}
+
+fn collect_leaves_base(
+    prefix: &str,
+    store: &LocalStore,
+    manifest_id: &ObjectId,
+    kind: StatusDelta,
+    out: &mut Vec<(StatusDelta, String)>,
+) -> Result<()> {
+    let m = store.get_manifest(manifest_id)?;
+    for e in &m.entries {
+        let path = if prefix.is_empty() {
+            e.name.clone()
+        } else {
+            format!("{}/{}", prefix, e.name)
+        };
+        match &e.kind {
+            ManifestEntryKind::Dir { manifest } => {
+                collect_leaves_base(&path, store, manifest, kind, out)?;
+            }
+            _ => out.push((kind, path)),
+        }
+    }
+    Ok(())
 }
 
 fn draw(frame: &mut ratatui::Frame, app: &App) {

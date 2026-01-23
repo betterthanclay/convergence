@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -9,6 +10,7 @@ use crate::model::{
     SuperpositionVariantKind, compute_snap_id,
 };
 use crate::store::LocalStore;
+use crate::store::hash_bytes;
 
 #[derive(Clone)]
 pub struct Workspace {
@@ -90,6 +92,18 @@ impl Workspace {
         Ok(())
     }
 
+    /// Compute a manifest tree for the current working directory without writing a snap.
+    ///
+    /// Note: this still reads file contents to compute stable blob ids.
+    pub fn current_manifest_tree(
+        &self,
+    ) -> Result<(ObjectId, HashMap<ObjectId, Manifest>, SnapStats)> {
+        let mut stats = SnapStats::default();
+        let mut manifests: HashMap<ObjectId, Manifest> = HashMap::new();
+        let root_manifest = build_manifest_in_memory(&self.root, &mut stats, &mut manifests)?;
+        Ok((root_manifest, manifests, stats))
+    }
+
     fn build_manifest(&self, dir: &Path, stats: &mut SnapStats) -> Result<ObjectId> {
         let mut entries = Vec::new();
         let children = read_dir_sorted(dir)?;
@@ -146,6 +160,69 @@ impl Workspace {
         };
         self.store.put_manifest(&manifest)
     }
+}
+
+fn build_manifest_in_memory(
+    dir: &Path,
+    stats: &mut SnapStats,
+    manifests: &mut HashMap<ObjectId, Manifest>,
+) -> Result<ObjectId> {
+    let mut entries = Vec::new();
+    let children = read_dir_sorted(dir)?;
+
+    for child in children {
+        let file_name = child
+            .file_name()
+            .into_string()
+            .map_err(|_| anyhow!("non-utf8 filename in {}", dir.display()))?;
+
+        if should_ignore_name(&file_name) {
+            continue;
+        }
+
+        let path = child.path();
+        let file_type = child.file_type().context("read file type")?;
+
+        let kind = if file_type.is_dir() {
+            stats.dirs += 1;
+            let manifest = build_manifest_in_memory(&path, stats, manifests)?;
+            ManifestEntryKind::Dir { manifest }
+        } else if file_type.is_file() {
+            let bytes = fs::read(&path).with_context(|| format!("read file {}", path.display()))?;
+            let size = bytes.len() as u64;
+            let blob = hash_bytes(&bytes);
+            let mode = file_mode(&path)?;
+            stats.files += 1;
+            stats.bytes += size;
+            ManifestEntryKind::File { blob, mode, size }
+        } else if file_type.is_symlink() {
+            let target =
+                fs::read_link(&path).with_context(|| format!("read symlink {}", path.display()))?;
+            let target = target
+                .to_str()
+                .ok_or_else(|| anyhow!("non-utf8 symlink target for {}", path.display()))?
+                .to_string();
+            stats.symlinks += 1;
+            ManifestEntryKind::Symlink { target }
+        } else {
+            continue;
+        };
+
+        entries.push(ManifestEntry {
+            name: file_name,
+            kind,
+        });
+    }
+
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    let manifest = Manifest {
+        version: 1,
+        entries,
+    };
+    let bytes = serde_json::to_vec(&manifest).context("serialize manifest")?;
+    let id = hash_bytes(&bytes);
+    manifests.insert(id.clone(), manifest);
+    Ok(id)
 }
 
 fn should_ignore_name(name: &str) -> bool {
