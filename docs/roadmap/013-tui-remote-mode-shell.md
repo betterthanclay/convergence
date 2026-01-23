@@ -21,23 +21,23 @@ Out of scope:
 
 ### A) Remote config + connectivity
 
-- [ ] `remote show`: print configured remote.
-- [ ] `remote set ...`: optional (if already implemented in CLI, can call through).
-- [ ] `ping` (or `remote ping`): call `/healthz` and show latency/status.
+- [x] `remote show`: print configured remote.
+- [x] `remote set ...`: optional (if already implemented in CLI, can call through).
+- [x] `ping` (or `remote ping`): call `/healthz` and show latency/status.
 
 ### B) Remote operations
 
-- [ ] `publish [--snap-id ...] [--scope ...] [--gate ...] [--json]`.
-- [ ] `fetch [--snap-id ...] [--json]`.
-- [ ] `inbox [--scope ...] [--gate ...] [--limit N]`: list publications.
-- [ ] `bundles [--scope ...] [--gate ...] [--limit N]`: list bundles.
-- [ ] `bundle [--scope ...] [--gate ...] [--publication <id>...] [--json]`.
-- [ ] `approve --bundle-id <id>`.
-- [ ] `promote --bundle-id <id> --to-gate <id>`.
+- [x] `publish [--snap-id ...] [--scope ...] [--gate ...] [--json]`.
+- [x] `fetch [--snap-id ...] [--json]`.
+- [x] `inbox [--scope ...] [--gate ...] [--limit N]`: list publications.
+- [x] `bundles [--scope ...] [--gate ...] [--limit N]`: list bundles.
+- [x] `bundle [--scope ...] [--gate ...] [--publication <id>...] [--json]`.
+- [x] `approve --bundle-id <id>`.
+- [x] `promote --bundle-id <id> --to-gate <id>`.
 
 ### C) Superpositions (remote-backed)
 
-- [ ] `superpositions --bundle-id <id>`:
+- [x] `superpositions --bundle-id <id>`:
   - fetch bundle root manifest tree
   - print conflicted paths + decision status
 

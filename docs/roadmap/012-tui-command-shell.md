@@ -23,39 +23,40 @@ Out of scope:
 
 ### A) App lifecycle + modes
 
-- [ ] Refactor `src/tui.rs` startup to only discover workspace + config (no HTTP).
-- [ ] Add `Mode::{Local, Remote}` with a visible indicator.
-- [ ] Bind `Tab` to toggle mode only when input is empty.
-- [ ] Bind `q`/`esc` to quit (with `esc` first clearing input/palette).
+- [x] Refactor `src/tui.rs` startup to only discover workspace + config (no HTTP).
+- [x] Add `Mode::{Local, Remote}` with a visible indicator.
+- [x] Bind `Tab` to toggle mode only when input is empty.
+- [x] Bind `q`/`esc` to quit (with `esc` first clearing input/palette).
 
 ### B) Shell UI
 
-- [ ] Add a scrollback model: timestamp + kind (command/output/error).
-- [ ] Add a single-line input editor:
+- [x] Add a scrollback model: timestamp + kind (command/output/error).
+- [x] Add a single-line input editor:
   - cursor left/right
   - backspace/delete
   - ctrl-u clear line
   - history up/down
-- [ ] Add a suggestion/palette box below input:
+- [x] Add a suggestion/palette box below input:
   - fuzzy match command names
   - `Tab` cycles suggestions when input non-empty
   - `Enter` runs selected / best match
 
 ### C) Command parsing
 
-- [ ] Parse input as a command line; accept optional leading `/`.
-- [ ] Tokenize with quotes (e.g. `snap -m "msg"`).
-- [ ] Provide `help` with short usage lines.
+- [x] Parse input as a command line; accept optional leading `/`.
+- [x] Tokenize with quotes (e.g. `snap -m "msg"`).
+- [x] Provide `help` with short usage lines.
 
 ### D) Local commands
 
-- [ ] `status`: workspace root, remote configured yes/no, snap count, latest snap id/time.
-- [ ] `snap [-m "..."] [--json]`: create a snap.
-- [ ] `snaps [--limit N] [--json]`: list snaps.
-- [ ] `show <snap_id> [--json]`: show snap details.
-- [ ] `restore <snap_id> [--force]`: restore snap.
-- [ ] `clear`: clear scrollback.
-- [ ] `quit`: exit.
+- [x] `status`: workspace root, remote configured yes/no, snap count, latest snap id/time.
+- [x] `init [--force]`: initialize `.converge` (for starting outside a workspace).
+- [x] `snap [-m "..."]`: create a snap.
+- [x] `snaps [--limit N]`: list snaps.
+- [x] `show <snap_id>`: show snap details.
+- [x] `restore <snap_id> [--force]`: restore snap.
+- [x] `clear`: clear scrollback.
+- [x] `quit`: exit.
 
 ## Exit Criteria
 

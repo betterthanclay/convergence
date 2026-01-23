@@ -24,24 +24,28 @@ Out of scope:
 
 ### A) Shell + view composition
 
-- [ ] Make Shell the baseline layout.
-- [ ] Add a "panel" area that can be opened/closed.
-- [ ] Ensure command execution always writes to scrollback (even if a panel is open).
+- [x] Make Shell the baseline layout.
+- [x] Add a "panel" area that can be opened/closed.
+- [x] Ensure command execution always writes to scrollback (even if a panel is open).
 
 ### B) Inbox panel
 
-- [ ] Remote-backed list with filter and selection.
-- [ ] Show publication details (id, snap, publisher, created_at).
+- [x] Remote-backed list with selection.
+- [x] Show publication details (id, snap, publisher, created_at).
+- [x] Add filter in panel (shell command remains global).
 
 ### C) Bundles panel
 
-- [ ] Remote-backed list with filter and selection.
-- [ ] Actions: approve, promote (with gate picker), view superpositions.
+- [x] Remote-backed list with selection.
+- [x] Show bundle details (id, promotable, reasons).
+- [x] Add filter in panel (shell command remains global).
+- [x] Actions: approve, promote, view superpositions (via panel shortcuts that prefill commands).
 
 ### D) Superpositions panel
 
-- [ ] Navigate conflicted paths.
-- [ ] Show variant details + VariantKey JSON.
+- [x] Navigate conflicted paths.
+- [x] Filter conflicted paths via `superpositions --filter`.
+- [x] Show variant details + VariantKey JSON.
 - [ ] Integrate decision picking and validation status.
 
 ## Exit Criteria
