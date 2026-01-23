@@ -46,7 +46,7 @@ Out of scope:
 - [x] Navigate conflicted paths.
 - [x] Filter conflicted paths via `superpositions --filter`.
 - [x] Show variant details + VariantKey JSON.
-- [ ] Integrate decision picking and validation status.
+- [x] Integrate decision picking and validation status.
 
 ## Exit Criteria
 

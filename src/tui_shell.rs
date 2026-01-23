@@ -14,8 +14,7 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::model::RemoteConfig;
-use crate::model::{ObjectId, ResolutionDecision};
+use crate::model::{ObjectId, RemoteConfig, Resolution, ResolutionDecision};
 use crate::remote::RemoteClient;
 use crate::resolve::{ResolutionValidation, superposition_variants, validate_resolution};
 use crate::workspace::Workspace;
@@ -1793,11 +1792,7 @@ impl App {
             decisions = r.decisions;
         }
 
-        let validation = if decisions.is_empty() {
-            None
-        } else {
-            validate_resolution(&ws.store, &root, &decisions).ok()
-        };
+        let validation = validate_resolution(&ws.store, &root, &decisions).ok();
 
         let filter_lc = filter.as_ref().map(|s| s.to_lowercase());
         let mut items = variants
@@ -2043,9 +2038,36 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char(c)
             if key.modifiers.contains(KeyModifiers::ALT) && app.input.buf.is_empty() =>
         {
-            if let Some(p) = &app.panel
-                && let Some(idx) = p.selected()
-            {
+            let selected = app.panel.as_ref().and_then(|p| p.selected());
+            if let Some(idx) = selected {
+                let is_superpositions =
+                    matches!(app.panel.as_ref(), Some(Panel::Superpositions { .. }));
+
+                if is_superpositions {
+                    if c.is_ascii_digit() {
+                        let n = c.to_digit(10).unwrap_or(0) as usize;
+                        // Alt+0 clears; Alt+1..9 selects variant.
+                        if n == 0 {
+                            superpositions_clear_decision(app);
+                        } else {
+                            superpositions_pick_variant(app, n - 1);
+                        }
+                        return;
+                    }
+
+                    if c == 'f' {
+                        superpositions_jump_next_invalid(app);
+                        return;
+                    }
+
+                    if c == 'n' {
+                        superpositions_jump_next_missing(app);
+                        return;
+                    }
+                }
+
+                let p = app.panel.as_ref().expect("panel exists if selected exists");
+
                 let mut prefill = None;
                 match (p, c) {
                     (Panel::Inbox { items, .. }, 'b') => {
@@ -2103,6 +2125,277 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         _ => {}
+    }
+}
+
+fn superpositions_clear_decision(app: &mut App) {
+    let Some(ws) = app.require_workspace() else {
+        return;
+    };
+
+    let (bundle_id, root_manifest, path) = match app.panel.as_ref() {
+        Some(Panel::Superpositions {
+            bundle_id,
+            root_manifest,
+            items,
+            selected,
+            ..
+        }) => {
+            if items.is_empty() {
+                app.push_error("no selected superposition".to_string());
+                return;
+            }
+            let idx = (*selected).min(items.len().saturating_sub(1));
+            let path = items[idx].0.clone();
+            (bundle_id.clone(), root_manifest.clone(), path)
+        }
+        _ => return,
+    };
+
+    // Load or init resolution.
+    let mut res = if ws.store.has_resolution(&bundle_id) {
+        match ws.store.get_resolution(&bundle_id) {
+            Ok(r) => r,
+            Err(err) => {
+                app.push_error(format!("load resolution: {:#}", err));
+                return;
+            }
+        }
+    } else {
+        Resolution {
+            version: 2,
+            bundle_id: bundle_id.clone(),
+            root_manifest: root_manifest.clone(),
+            created_at: now_ts(),
+            decisions: std::collections::BTreeMap::new(),
+        }
+    };
+
+    if res.root_manifest != root_manifest {
+        app.push_error("resolution root_manifest mismatch".to_string());
+        return;
+    }
+    if res.version == 1 {
+        res.version = 2;
+    }
+
+    res.decisions.remove(&path);
+    if let Err(err) = ws.store.put_resolution(&res) {
+        app.push_error(format!("write resolution: {:#}", err));
+        return;
+    }
+
+    {
+        let Some(Panel::Superpositions {
+            root_manifest,
+            decisions,
+            validation,
+            updated_at,
+            ..
+        }) = app.panel.as_mut()
+        else {
+            return;
+        };
+
+        decisions.remove(&path);
+        *validation = validate_resolution(&ws.store, root_manifest, decisions).ok();
+        *updated_at = now_ts();
+    }
+
+    app.push_output(vec![format!("cleared decision for {}", path)]);
+}
+
+fn superpositions_pick_variant(app: &mut App, variant_index: usize) {
+    let Some(ws) = app.require_workspace() else {
+        return;
+    };
+
+    let (bundle_id, root_manifest, path, key, variants_len) = match app.panel.as_ref() {
+        Some(Panel::Superpositions {
+            bundle_id,
+            root_manifest,
+            variants,
+            items,
+            selected,
+            ..
+        }) => {
+            if items.is_empty() {
+                app.push_error("no selected superposition".to_string());
+                return;
+            }
+            let idx = (*selected).min(items.len().saturating_sub(1));
+            let path = items[idx].0.clone();
+            let Some(vs) = variants.get(&path) else {
+                app.push_error("variants not loaded".to_string());
+                return;
+            };
+            let variants_len = vs.len();
+            let Some(v) = vs.get(variant_index) else {
+                app.push_error(format!("variant out of range (variants: {})", variants_len));
+                return;
+            };
+            (
+                bundle_id.clone(),
+                root_manifest.clone(),
+                path,
+                v.key(),
+                variants_len,
+            )
+        }
+        _ => return,
+    };
+
+    // Load or init resolution.
+    let mut res = if ws.store.has_resolution(&bundle_id) {
+        match ws.store.get_resolution(&bundle_id) {
+            Ok(r) => r,
+            Err(err) => {
+                app.push_error(format!("load resolution: {:#}", err));
+                return;
+            }
+        }
+    } else {
+        Resolution {
+            version: 2,
+            bundle_id: bundle_id.clone(),
+            root_manifest: root_manifest.clone(),
+            created_at: now_ts(),
+            decisions: std::collections::BTreeMap::new(),
+        }
+    };
+
+    if res.root_manifest != root_manifest {
+        app.push_error("resolution root_manifest mismatch".to_string());
+        return;
+    }
+    if res.version == 1 {
+        res.version = 2;
+    }
+
+    let decision = ResolutionDecision::Key(key);
+    res.decisions.insert(path.clone(), decision.clone());
+    if let Err(err) = ws.store.put_resolution(&res) {
+        app.push_error(format!("write resolution: {:#}", err));
+        return;
+    }
+
+    {
+        let Some(Panel::Superpositions {
+            root_manifest,
+            decisions,
+            validation,
+            updated_at,
+            ..
+        }) = app.panel.as_mut()
+        else {
+            return;
+        };
+
+        decisions.insert(path.clone(), decision);
+        *validation = validate_resolution(&ws.store, root_manifest, decisions).ok();
+        *updated_at = now_ts();
+    }
+
+    app.push_output(vec![format!(
+        "picked variant #{} for {} (variants: {})",
+        variant_index + 1,
+        path,
+        variants_len
+    )]);
+}
+
+fn superpositions_jump_next_missing(app: &mut App) {
+    let next = match app.panel.as_ref() {
+        Some(Panel::Superpositions {
+            items,
+            selected,
+            decisions,
+            ..
+        }) => {
+            if items.is_empty() {
+                return;
+            }
+            let start = (*selected).min(items.len().saturating_sub(1));
+            (1..=items.len()).find_map(|off| {
+                let idx = (start + off) % items.len();
+                let path = &items[idx].0;
+                if !decisions.contains_key(path) {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+        }
+        _ => return,
+    };
+
+    if let Some(idx) = next {
+        if let Some(Panel::Superpositions {
+            selected,
+            updated_at,
+            ..
+        }) = app.panel.as_mut()
+        {
+            *selected = idx;
+            *updated_at = now_ts();
+        }
+        app.push_output(vec!["jumped to missing".to_string()]);
+    } else {
+        app.push_output(vec!["no missing decisions".to_string()]);
+    }
+}
+
+fn superpositions_jump_next_invalid(app: &mut App) {
+    let next = match app.panel.as_ref() {
+        Some(Panel::Superpositions {
+            items,
+            selected,
+            validation,
+            ..
+        }) => {
+            if items.is_empty() {
+                return;
+            }
+
+            let Some(vr) = validation.as_ref() else {
+                return;
+            };
+
+            let mut invalid = std::collections::HashSet::new();
+            for d in &vr.invalid_keys {
+                invalid.insert(d.path.as_str());
+            }
+            for d in &vr.out_of_range {
+                invalid.insert(d.path.as_str());
+            }
+
+            let start = (*selected).min(items.len().saturating_sub(1));
+            (1..=items.len()).find_map(|off| {
+                let idx = (start + off) % items.len();
+                let path = items[idx].0.as_str();
+                if invalid.contains(path) {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+        }
+        _ => return,
+    };
+
+    if let Some(idx) = next {
+        if let Some(Panel::Superpositions {
+            selected,
+            updated_at,
+            ..
+        }) = app.panel.as_mut()
+        {
+            *selected = idx;
+            *updated_at = now_ts();
+        }
+        app.push_output(vec!["jumped to invalid".to_string()]);
+    } else {
+        app.push_output(vec!["no invalid decisions".to_string()]);
     }
 }
 
@@ -2445,11 +2738,21 @@ fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatu
             }
             let list = List::new(rows)
                 .block(Block::default().borders(Borders::BOTTOM).title(format!(
-                    "bundle={}{} (Enter/Alt+p pick, Alt+i init, Alt+v validate, Alt+a apply)",
+                    "bundle={}{}{} (Alt+1..9 pick, Alt+0 clear, Alt+n next missing, Alt+f next invalid)",
                     bundle_id.chars().take(8).collect::<String>(),
                     filter
                         .as_ref()
                         .map(|f| format!(" filter={}", f))
+                        .unwrap_or_default(),
+                    validation
+                        .as_ref()
+                        .map(|v| {
+                            format!(
+                                " missing={} invalid={}",
+                                v.missing.len(),
+                                v.invalid_keys.len() + v.out_of_range.len()
+                            )
+                        })
                         .unwrap_or_default()
                 )))
                 .highlight_style(Style::default().bg(Color::DarkGray));
@@ -2482,6 +2785,15 @@ fn draw_panel(frame: &mut ratatui::Frame, app: &App, panel: &Panel, area: ratatu
                             "invalid_keys: {}",
                             vr.invalid_keys.len()
                         )));
+                    }
+                    if !vr.out_of_range.is_empty() {
+                        out.push(Line::from(format!(
+                            "out_of_range: {}",
+                            vr.out_of_range.len()
+                        )));
+                    }
+                    if !vr.extraneous.is_empty() {
+                        out.push(Line::from(format!("extraneous: {}", vr.extraneous.len())));
                     }
                 }
 
