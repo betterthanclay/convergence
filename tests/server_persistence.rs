@@ -142,7 +142,7 @@ fn server_persists_repo_across_restart() -> Result<()> {
         .to_string();
 
     // Create bundle.
-    client
+    let bundle: serde_json::Value = client
         .post(format!("{}/repos/test/bundles", base_url1))
         .header(reqwest::header::AUTHORIZATION, &auth)
         .json(&serde_json::json!({
@@ -153,7 +153,42 @@ fn server_persists_repo_across_restart() -> Result<()> {
         .send()
         .context("create bundle")?
         .error_for_status()
-        .context("create bundle status")?;
+        .context("create bundle status")?
+        .json()
+        .context("parse bundle")?;
+    let bundle_id = bundle
+        .get("id")
+        .and_then(|v| v.as_str())
+        .context("bundle id missing")?
+        .to_string();
+
+    // Pin bundle.
+    client
+        .post(format!(
+            "{}/repos/test/bundles/{}/pin",
+            base_url1, bundle_id
+        ))
+        .header(reqwest::header::AUTHORIZATION, &auth)
+        .send()
+        .context("pin bundle")?
+        .error_for_status()
+        .context("pin bundle status")?;
+
+    // Verify pins visible.
+    let pins1: serde_json::Value = client
+        .get(format!("{}/repos/test/pins", base_url1))
+        .header(reqwest::header::AUTHORIZATION, &auth)
+        .send()
+        .context("list pins")?
+        .error_for_status()
+        .context("list pins status")?
+        .json()
+        .context("parse pins")?;
+    let pins1_bundles = pins1
+        .get("bundles")
+        .and_then(|v| v.as_array())
+        .context("pins bundles missing")?;
+    assert!(pins1_bundles.iter().any(|v| v.as_str() == Some(&bundle_id)));
 
     // Verify state visible.
     let pubs1: Vec<serde_json::Value> = client
@@ -206,6 +241,22 @@ fn server_persists_repo_across_restart() -> Result<()> {
         .json()
         .context("parse bundles after restart")?;
     assert_eq!(bundles2.len(), 1);
+
+    // Pins should persist across restart.
+    let pins2: serde_json::Value = client
+        .get(format!("{}/repos/test/pins", base_url2))
+        .header(reqwest::header::AUTHORIZATION, &auth)
+        .send()
+        .context("list pins after restart")?
+        .error_for_status()
+        .context("list pins after restart status")?
+        .json()
+        .context("parse pins after restart")?;
+    let pins2_bundles = pins2
+        .get("bundles")
+        .and_then(|v| v.as_array())
+        .context("pins bundles missing after restart")?;
+    assert!(pins2_bundles.iter().any(|v| v.as_str() == Some(&bundle_id)));
 
     // Ensure we wrote repo.json.
     assert!(data_dir_path.join("test").join("repo.json").exists());

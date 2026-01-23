@@ -46,8 +46,11 @@ struct Repo {
 
     bundles: Vec<Bundle>,
 
+    #[serde(default)]
+    pinned_bundles: HashSet<String>,
+
     promotions: Vec<Promotion>,
-    promotion_state: HashMap<String, HashMap<String, String>>,
+    promotion_state: HashMap<String, HashMap<String, String>>, 
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -224,6 +227,15 @@ async fn run() -> Result<()> {
         )
         .route("/repos/:repo_id/bundles/:bundle_id", get(get_bundle))
         .route(
+            "/repos/:repo_id/bundles/:bundle_id/pin",
+            axum::routing::post(pin_bundle),
+        )
+        .route(
+            "/repos/:repo_id/bundles/:bundle_id/unpin",
+            axum::routing::post(unpin_bundle),
+        )
+        .route("/repos/:repo_id/pins", get(list_pins))
+        .route(
             "/repos/:repo_id/bundles/:bundle_id/approve",
             axum::routing::post(approve_bundle),
         )
@@ -252,6 +264,7 @@ async fn run() -> Result<()> {
             "/repos/:repo_id/objects/missing",
             axum::routing::post(find_missing_objects),
         )
+        .route("/repos/:repo_id/gc", axum::routing::post(gc_repo))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_bearer,
@@ -380,6 +393,7 @@ async fn create_repo(
     let snaps = HashSet::new();
     let publications = Vec::new();
     let bundles = Vec::new();
+    let pinned_bundles = HashSet::new();
     let promotions = Vec::new();
     let promotion_state = HashMap::new();
 
@@ -397,6 +411,8 @@ async fn create_repo(
         publications,
 
         bundles,
+
+        pinned_bundles,
 
         promotions,
         promotion_state,
@@ -623,6 +639,9 @@ async fn get_blob(
     let path = repo_data_dir(&state, &repo_id)
         .join("objects/blobs")
         .join(&blob_id);
+    if !path.exists() {
+        return Err(not_found());
+    }
     let bytes = std::fs::read(&path)
         .with_context(|| format!("read {}", path.display()))
         .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
@@ -862,6 +881,128 @@ fn read_recipe(
     let recipe: converge::model::FileRecipe =
         serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
     Ok(recipe)
+}
+
+fn collect_objects_from_manifest_tree(
+    state: &AppState,
+    repo_id: &str,
+    root_manifest_id: &str,
+    blobs: &mut HashSet<String>,
+    manifests: &mut HashSet<String>,
+    recipes: &mut HashSet<String>,
+) -> Result<(), Response> {
+    fn visit_recipe(
+        state: &AppState,
+        repo_id: &str,
+        recipe_id: &str,
+        blobs: &mut HashSet<String>,
+        recipes: &mut HashSet<String>,
+        visited: &mut HashSet<String>,
+    ) -> Result<(), Response> {
+        if !visited.insert(recipe_id.to_string()) {
+            return Ok(());
+        }
+        recipes.insert(recipe_id.to_string());
+        let recipe = read_recipe(state, repo_id, recipe_id)?;
+        for c in recipe.chunks {
+            blobs.insert(c.blob.as_str().to_string());
+        }
+        Ok(())
+    }
+
+    fn visit_manifest(
+        state: &AppState,
+        repo_id: &str,
+        manifest_id: &str,
+        blobs: &mut HashSet<String>,
+        manifests: &mut HashSet<String>,
+        recipes: &mut HashSet<String>,
+        visited_manifests: &mut HashSet<String>,
+        visited_recipes: &mut HashSet<String>,
+    ) -> Result<(), Response> {
+        if !visited_manifests.insert(manifest_id.to_string()) {
+            return Ok(());
+        }
+        manifests.insert(manifest_id.to_string());
+
+        let manifest = read_manifest(state, repo_id, manifest_id)?;
+        for e in manifest.entries {
+            match e.kind {
+                converge::model::ManifestEntryKind::File { blob, .. } => {
+                    blobs.insert(blob.as_str().to_string());
+                }
+                converge::model::ManifestEntryKind::FileChunks { recipe, .. } => {
+                    visit_recipe(
+                        state,
+                        repo_id,
+                        recipe.as_str(),
+                        blobs,
+                        recipes,
+                        visited_recipes,
+                    )?;
+                }
+                converge::model::ManifestEntryKind::Dir { manifest } => {
+                    visit_manifest(
+                        state,
+                        repo_id,
+                        manifest.as_str(),
+                        blobs,
+                        manifests,
+                        recipes,
+                        visited_manifests,
+                        visited_recipes,
+                    )?;
+                }
+                converge::model::ManifestEntryKind::Symlink { .. } => {}
+                converge::model::ManifestEntryKind::Superposition { variants } => {
+                    for v in variants {
+                        match v.kind {
+                            converge::model::SuperpositionVariantKind::File { blob, .. } => {
+                                blobs.insert(blob.as_str().to_string());
+                            }
+                            converge::model::SuperpositionVariantKind::FileChunks { recipe, .. } => {
+                                visit_recipe(
+                                    state,
+                                    repo_id,
+                                    recipe.as_str(),
+                                    blobs,
+                                    recipes,
+                                    visited_recipes,
+                                )?;
+                            }
+                            converge::model::SuperpositionVariantKind::Dir { manifest } => {
+                                visit_manifest(
+                                    state,
+                                    repo_id,
+                                    manifest.as_str(),
+                                    blobs,
+                                    manifests,
+                                    recipes,
+                                    visited_manifests,
+                                    visited_recipes,
+                                )?;
+                            }
+                            converge::model::SuperpositionVariantKind::Symlink { .. } => {}
+                            converge::model::SuperpositionVariantKind::Tombstone => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    visit_manifest(
+        state,
+        repo_id,
+        root_manifest_id,
+        blobs,
+        manifests,
+        recipes,
+        &mut HashSet::new(),
+        &mut HashSet::new(),
+    )
 }
 
 fn validate_manifest_tree_availability(
@@ -1249,6 +1390,9 @@ async fn get_manifest(
     let path = repo_data_dir(&state, &repo_id)
         .join("objects/manifests")
         .join(format!("{}.json", manifest_id));
+    if !path.exists() {
+        return Err(not_found());
+    }
     let bytes = std::fs::read(&path)
         .with_context(|| format!("read {}", path.display()))
         .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
@@ -1282,6 +1426,9 @@ async fn get_recipe(
     let path = repo_data_dir(&state, &repo_id)
         .join("objects/recipes")
         .join(format!("{}.json", recipe_id));
+    if !path.exists() {
+        return Err(not_found());
+    }
     let bytes = std::fs::read(&path)
         .with_context(|| format!("read {}", path.display()))
         .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
@@ -1363,6 +1510,9 @@ async fn get_snap(
     let path = repo_data_dir(&state, &repo_id)
         .join("objects/snaps")
         .join(format!("{}.json", snap_id));
+    if !path.exists() {
+        return Err(not_found());
+    }
     let bytes = std::fs::read(&path)
         .with_context(|| format!("read {}", path.display()))
         .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
@@ -1377,6 +1527,225 @@ fn json_bytes(bytes: Vec<u8>) -> Response {
         axum::body::Bytes::from(bytes),
     )
         .into_response()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GcQuery {
+    #[serde(default = "default_true")]
+    dry_run: bool,
+    #[serde(default = "default_true")]
+    prune_metadata: bool,
+}
+
+async fn gc_repo(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+    Query(q): Query<GcQuery>,
+) -> Result<Json<serde_json::Value>, Response> {
+    let mut repos = state.repos.write().await;
+    let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
+    if !can_publish(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    if !q.prune_metadata && !q.dry_run {
+        return Err(bad_request(anyhow::anyhow!(
+            "refusing destructive GC with prune_metadata=false (would create dangling references); use dry_run=true or prune_metadata=true"
+        )));
+    }
+
+    // Retention roots: pinned bundles and current promotion-state pointers.
+    let mut keep_bundles: HashSet<String> = repo.pinned_bundles.iter().cloned().collect();
+    for per_scope in repo.promotion_state.values() {
+        for bid in per_scope.values() {
+            keep_bundles.insert(bid.clone());
+        }
+    }
+
+    let mut keep_publications: HashSet<String> = HashSet::new();
+    let mut keep_snaps: HashSet<String> = HashSet::new();
+    let mut keep_blobs: HashSet<String> = HashSet::new();
+    let mut keep_manifests: HashSet<String> = HashSet::new();
+    let mut keep_recipes: HashSet<String> = HashSet::new();
+
+    let mut bundle_roots: Vec<String> = Vec::new();
+    for bid in &keep_bundles {
+        let bundle = if let Some(b) = repo.bundles.iter().find(|b| b.id == *bid) {
+            b.clone()
+        } else {
+            load_bundle_from_disk(state.as_ref(), &repo_id, bid)?
+        };
+
+        bundle_roots.push(bundle.root_manifest.clone());
+        for pid in bundle.input_publications {
+            keep_publications.insert(pid);
+        }
+    }
+
+    for p in &repo.publications {
+        if keep_publications.contains(&p.id) {
+            keep_snaps.insert(p.snap_id.clone());
+        }
+    }
+
+    // Collect objects from kept bundle roots.
+    for root in &bundle_roots {
+        collect_objects_from_manifest_tree(
+            state.as_ref(),
+            &repo_id,
+            root,
+            &mut keep_blobs,
+            &mut keep_manifests,
+            &mut keep_recipes,
+        )?;
+    }
+
+    // Collect objects from kept snaps (provenance roots).
+    for sid in keep_snaps.clone() {
+        let path = repo_data_dir(state.as_ref(), &repo_id)
+            .join("objects/snaps")
+            .join(format!("{}.json", sid));
+        if !path.exists() {
+            continue;
+        }
+        let bytes = std::fs::read(&path)
+            .with_context(|| format!("read {}", path.display()))
+            .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+        let snap: converge::model::SnapRecord =
+            serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+        collect_objects_from_manifest_tree(
+            state.as_ref(),
+            &repo_id,
+            snap.root_manifest.as_str(),
+            &mut keep_blobs,
+            &mut keep_manifests,
+            &mut keep_recipes,
+        )?;
+    }
+
+    fn sweep_ids(
+        dir: &std::path::Path,
+        ext: Option<&str>,
+        keep: &HashSet<String>,
+        dry_run: bool,
+    ) -> Result<(usize, usize), Response> {
+        if !dir.is_dir() {
+            return Ok((0, 0));
+        }
+        let mut deleted = 0;
+        let mut kept = 0;
+        for entry in std::fs::read_dir(dir)
+            .with_context(|| format!("read {}", dir.display()))
+            .map_err(|e| internal_error(anyhow::anyhow!(e)))?
+        {
+            let entry = entry
+                .with_context(|| format!("read {} entry", dir.display()))
+                .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let id = match ext {
+                None => path.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()),
+                Some(e) => {
+                    if path.extension().and_then(|s| s.to_str()) != Some(e) {
+                        continue;
+                    }
+                    path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
+                }
+            };
+            let Some(id) = id else {
+                continue;
+            };
+            if id.len() != 64 {
+                continue;
+            }
+            if keep.contains(&id) {
+                kept += 1;
+                continue;
+            }
+            deleted += 1;
+            if !dry_run {
+                std::fs::remove_file(&path)
+                    .with_context(|| format!("remove {}", path.display()))
+                    .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+            }
+        }
+        Ok((deleted, kept))
+    }
+
+    // Sweep objects.
+    let objects_root = repo_data_dir(state.as_ref(), &repo_id).join("objects");
+    let (deleted_blobs, kept_blobs_count) =
+        sweep_ids(&objects_root.join("blobs"), None, &keep_blobs, q.dry_run)?;
+    let (deleted_manifests, kept_manifests_count) = sweep_ids(
+        &objects_root.join("manifests"),
+        Some("json"),
+        &keep_manifests,
+        q.dry_run,
+    )?;
+    let (deleted_recipes, kept_recipes_count) = sweep_ids(
+        &objects_root.join("recipes"),
+        Some("json"),
+        &keep_recipes,
+        q.dry_run,
+    )?;
+
+    let (deleted_snaps, _kept_snaps_count) = if q.prune_metadata {
+        sweep_ids(
+            &objects_root.join("snaps"),
+            Some("json"),
+            &keep_snaps,
+            q.dry_run,
+        )?
+    } else {
+        (0, 0)
+    };
+
+    let (deleted_bundles, _kept_bundles_count) = if q.prune_metadata {
+        sweep_ids(
+            &repo_data_dir(state.as_ref(), &repo_id).join("bundles"),
+            Some("json"),
+            &keep_bundles,
+            q.dry_run,
+        )?
+    } else {
+        (0, 0)
+    };
+
+    if q.prune_metadata && !q.dry_run {
+        repo.bundles.retain(|b| keep_bundles.contains(&b.id));
+        repo.pinned_bundles.retain(|b| keep_bundles.contains(b));
+        repo.publications.retain(|p| keep_publications.contains(&p.id));
+        repo.snaps = keep_snaps.clone();
+        persist_repo(state.as_ref(), repo).map_err(internal_error)?;
+    }
+
+    Ok(Json(serde_json::json!({
+        "dry_run": q.dry_run,
+        "prune_metadata": q.prune_metadata,
+        "kept": {
+            "bundles": keep_bundles.len(),
+            "publications": keep_publications.len(),
+            "snaps": keep_snaps.len(),
+            "blobs": kept_blobs_count,
+            "manifests": kept_manifests_count,
+            "recipes": kept_recipes_count
+        },
+        "deleted": {
+            "bundles": deleted_bundles,
+            "snaps": deleted_snaps,
+            "blobs": deleted_blobs,
+            "manifests": deleted_manifests,
+            "recipes": deleted_recipes
+        }
+    })))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1827,6 +2196,66 @@ async fn approve_bundle(
     Ok(Json(bundle))
 }
 
+async fn list_pins(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<serde_json::Value>, Response> {
+    let repos = state.repos.read().await;
+    let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+    if !can_read(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    let mut bundles: Vec<String> = repo.pinned_bundles.iter().cloned().collect();
+    bundles.sort();
+    Ok(Json(serde_json::json!({"bundles": bundles})))
+}
+
+async fn pin_bundle(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, bundle_id)): Path<(String, String)>,
+) -> Result<Json<serde_json::Value>, Response> {
+    validate_object_id(&bundle_id).map_err(bad_request)?;
+
+    let mut repos = state.repos.write().await;
+    let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
+    if !can_publish(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    // Ensure bundle exists (in memory or on disk).
+    let _ = if repo.bundles.iter().any(|b| b.id == bundle_id) {
+        None
+    } else {
+        Some(load_bundle_from_disk(state.as_ref(), &repo_id, &bundle_id)?)
+    };
+
+    repo.pinned_bundles.insert(bundle_id.clone());
+    persist_repo(state.as_ref(), repo).map_err(internal_error)?;
+
+    Ok(Json(serde_json::json!({"bundle_id": bundle_id, "pinned": true})))
+}
+
+async fn unpin_bundle(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, bundle_id)): Path<(String, String)>,
+) -> Result<Json<serde_json::Value>, Response> {
+    validate_object_id(&bundle_id).map_err(bad_request)?;
+
+    let mut repos = state.repos.write().await;
+    let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
+    if !can_publish(repo, &subject.user) {
+        return Err(forbidden());
+    }
+
+    repo.pinned_bundles.remove(&bundle_id);
+    persist_repo(state.as_ref(), repo).map_err(internal_error)?;
+    Ok(Json(serde_json::json!({"bundle_id": bundle_id, "pinned": false})))
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct CreatePromotionRequest {
     bundle_id: String,
@@ -2136,6 +2565,7 @@ fn default_repo_state(state: &AppState, repo_id: &str) -> Repo {
         snaps: HashSet::new(),
         publications: Vec::new(),
         bundles: Vec::new(),
+        pinned_bundles: HashSet::new(),
         promotions: Vec::new(),
         promotion_state: HashMap::new(),
     }

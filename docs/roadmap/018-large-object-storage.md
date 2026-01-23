@@ -77,13 +77,13 @@ Defaults and configuration:
 - [x] Define per-gate object availability requirements:
   - early gates may allow "metadata-only" publications (manifest references accepted, bytes may be pending)
   - later gates require full availability of referenced objects
-- [ ] Define a "pinned" concept for bundles/releases that prevents GC of required objects.
+- [x] Define a "pinned" concept for bundles/releases that prevents GC of required objects.
 
 ### E) Retention + GC
 
 - [x] Local retention policy config (keep last N snaps, keep last X days, keep pinned).
 - [x] Local mark/sweep GC that deletes unreferenced objects.
-- [ ] Server retention policy that is driven by published bundles/releases.
+- [x] Server retention policy that is driven by published bundles/releases.
 
 ## Exit Criteria
 

@@ -1150,6 +1150,18 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
             help: "Create a bundle from publications",
         },
         CommandDef {
+            name: "pins",
+            aliases: &[],
+            usage: "pins",
+            help: "List pinned bundles",
+        },
+        CommandDef {
+            name: "pin",
+            aliases: &[],
+            usage: "pin --bundle-id <id> [--unpin]",
+            help: "Pin or unpin a bundle",
+        },
+        CommandDef {
             name: "approve",
             aliases: &[],
             usage: "approve --bundle-id <id>",
@@ -1746,7 +1758,7 @@ impl App {
                 }
 
                 "remote" | "ping" | "publish" | "fetch" | "inbox" | "bundles" | "bundle"
-                | "approve" | "promote" | "superpositions" | "supers" => {
+                | "pins" | "pin" | "approve" | "promote" | "superpositions" | "supers" => {
                     self.push_error("remote command; press Tab to switch to remote".to_string());
                 }
 
@@ -1768,6 +1780,8 @@ impl App {
                 "inbox" => self.cmd_inbox(args),
                 "bundles" => self.cmd_bundles(args),
                 "bundle" => self.cmd_bundle(args),
+                "pins" => self.cmd_pins(args),
+                "pin" => self.cmd_pin(args),
                 "approve" => self.cmd_approve(args),
                 "promote" => self.cmd_promote(args),
                 "superpositions" => self.cmd_superpositions(args),
@@ -3746,6 +3760,84 @@ impl App {
         match client.create_bundle(&scope, &gate, &pubs) {
             Ok(b) => self.push_output(vec![format!("bundle {}", b.id)]),
             Err(err) => self.push_error(format!("bundle: {:#}", err)),
+        }
+    }
+
+    fn cmd_pins(&mut self, args: &[String]) {
+        let _ = args;
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+
+        match client.list_pins() {
+            Ok(mut pins) => {
+                pins.bundles.sort();
+                let mut out = Vec::new();
+                out.push(format!("pinned bundles: {}", pins.bundles.len()));
+                out.extend(pins.bundles);
+                self.push_output(out);
+                self.refresh_root_view();
+            }
+            Err(err) => {
+                self.push_error(format!("pins: {:#}", err));
+            }
+        }
+    }
+
+    fn cmd_pin(&mut self, args: &[String]) {
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let mut bundle_id: Option<String> = None;
+        let mut unpin = false;
+
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--bundle-id" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --bundle-id".to_string());
+                        return;
+                    }
+                    bundle_id = Some(args[i].clone());
+                }
+                "--unpin" => {
+                    unpin = true;
+                }
+                a => {
+                    self.push_error(format!("unknown arg: {}", a));
+                    return;
+                }
+            }
+            i += 1;
+        }
+
+        let Some(bundle_id) = bundle_id else {
+            self.push_error("usage: pin --bundle-id <id> [--unpin]".to_string());
+            return;
+        };
+
+        let res = if unpin {
+            client.unpin_bundle(&bundle_id)
+        } else {
+            client.pin_bundle(&bundle_id)
+        };
+        match res {
+            Ok(()) => {
+                if unpin {
+                    self.push_output(vec![format!("unpinned {}", bundle_id)]);
+                } else {
+                    self.push_output(vec![format!("pinned {}", bundle_id)]);
+                }
+                self.refresh_root_view();
+            }
+            Err(err) => {
+                self.push_error(format!("pin: {:#}", err));
+            }
         }
     }
 

@@ -133,6 +133,26 @@ enum Commands {
         json: bool,
     },
 
+    /// List pinned bundles on the remote
+    Pins {
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Pin or unpin a bundle on the remote
+    Pin {
+        /// Bundle id to pin/unpin
+        #[arg(long)]
+        bundle_id: String,
+        /// Unpin instead of pin
+        #[arg(long)]
+        unpin: bool,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Show status for this workspace and remote
     Status {
         /// Emit JSON
@@ -528,6 +548,49 @@ fn run() -> Result<()> {
                     "Approved {} (still blocked: {:?})",
                     bundle.id, bundle.reasons
                 );
+            }
+        }
+        Some(Commands::Pins { json }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            let remote = require_remote(&ws.store)?;
+            let client = RemoteClient::new(remote)?;
+            let pins = client.list_pins()?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&pins).context("serialize pins json")?
+                );
+            } else {
+                for b in pins.bundles {
+                    println!("{}", b);
+                }
+            }
+        }
+        Some(Commands::Pin {
+            bundle_id,
+            unpin,
+            json,
+        }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            let remote = require_remote(&ws.store)?;
+            let client = RemoteClient::new(remote)?;
+            if unpin {
+                client.unpin_bundle(&bundle_id)?;
+            } else {
+                client.pin_bundle(&bundle_id)?;
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "bundle_id": bundle_id,
+                        "pinned": !unpin
+                    })
+                );
+            } else if unpin {
+                println!("Unpinned {}", bundle_id);
+            } else {
+                println!("Pinned {}", bundle_id);
             }
         }
         Some(Commands::Status { json, limit }) => {
