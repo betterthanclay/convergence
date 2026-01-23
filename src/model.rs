@@ -15,6 +15,17 @@ pub struct WorkspaceConfig {
 
     #[serde(default)]
     pub remote: Option<RemoteConfig>,
+
+    #[serde(default)]
+    pub chunking: Option<ChunkingConfig>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChunkingConfig {
+    /// Chunk size in bytes.
+    pub chunk_size: u64,
+    /// Chunking threshold in bytes. Files with size >= threshold are chunked.
+    pub threshold: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

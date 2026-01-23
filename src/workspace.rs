@@ -7,14 +7,20 @@ use anyhow::{Context, Result, anyhow};
 use time::format_description::well_known::Rfc3339;
 
 use crate::model::{
-    FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord,
-    SnapStats, SuperpositionVariantKind, compute_snap_id,
+    ChunkingConfig, FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind,
+    ObjectId, SnapRecord, SnapStats, SuperpositionVariantKind, compute_snap_id,
 };
 use crate::store::LocalStore;
 use crate::store::hash_bytes;
 
-const CHUNK_SIZE: usize = 4 * 1024 * 1024;
-const CHUNK_THRESHOLD: u64 = (CHUNK_SIZE as u64) * 2;
+const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
+const DEFAULT_CHUNK_THRESHOLD: u64 = 8 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug)]
+struct ChunkingPolicy {
+    chunk_size: usize,
+    threshold: u64,
+}
 
 #[derive(Clone)]
 pub struct Workspace {
@@ -52,10 +58,11 @@ impl Workspace {
 
     pub fn create_snap(&self, message: Option<String>) -> Result<SnapRecord> {
         // Validate store format early.
-        let _cfg = self.store.read_config()?;
+        let cfg = self.store.read_config()?;
+        let policy = chunking_policy_from_config(cfg.chunking.as_ref())?;
 
         let mut stats = SnapStats::default();
-        let root_manifest = self.build_manifest(&self.root, &mut stats)?;
+        let root_manifest = self.build_manifest(&self.root, &mut stats, policy)?;
         let created_at = time::OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .context("format created_at")?;
@@ -130,13 +137,21 @@ impl Workspace {
     pub fn current_manifest_tree(
         &self,
     ) -> Result<(ObjectId, HashMap<ObjectId, Manifest>, SnapStats)> {
+        let cfg = self.store.read_config()?;
+        let policy = chunking_policy_from_config(cfg.chunking.as_ref())?;
         let mut stats = SnapStats::default();
         let mut manifests: HashMap<ObjectId, Manifest> = HashMap::new();
-        let root_manifest = build_manifest_in_memory(&self.root, &mut stats, &mut manifests)?;
+        let root_manifest =
+            build_manifest_in_memory(&self.root, &mut stats, &mut manifests, policy)?;
         Ok((root_manifest, manifests, stats))
     }
 
-    fn build_manifest(&self, dir: &Path, stats: &mut SnapStats) -> Result<ObjectId> {
+    fn build_manifest(
+        &self,
+        dir: &Path,
+        stats: &mut SnapStats,
+        policy: ChunkingPolicy,
+    ) -> Result<ObjectId> {
         let mut entries = Vec::new();
         let children = read_dir_sorted(dir)?;
 
@@ -155,7 +170,7 @@ impl Workspace {
 
             let kind = if file_type.is_dir() {
                 stats.dirs += 1;
-                let manifest = self.build_manifest(&path, stats)?;
+                let manifest = self.build_manifest(&path, stats, policy)?;
                 ManifestEntryKind::Dir { manifest }
             } else if file_type.is_file() {
                 let mode = file_mode(&path)?;
@@ -163,8 +178,9 @@ impl Workspace {
                     .with_context(|| format!("stat {}", path.display()))?;
                 let size = meta.len();
 
-                let kind = if size >= CHUNK_THRESHOLD {
-                    let recipe = chunk_file_to_recipe_store(&self.store, &path, size)?;
+                let kind = if size >= policy.threshold {
+                    let recipe =
+                        chunk_file_to_recipe_store(&self.store, &path, size, policy.chunk_size)?;
                     ManifestEntryKind::FileChunks { recipe, mode, size }
                 } else {
                     let bytes =
@@ -204,10 +220,15 @@ impl Workspace {
     }
 }
 
-fn chunk_file_to_recipe_store(store: &LocalStore, path: &Path, size: u64) -> Result<ObjectId> {
+fn chunk_file_to_recipe_store(
+    store: &LocalStore,
+    path: &Path,
+    size: u64,
+    chunk_size: usize,
+) -> Result<ObjectId> {
     let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
     let mut r = BufReader::new(f);
-    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut buf = vec![0u8; chunk_size];
     let mut chunks = Vec::new();
     let mut total: u64 = 0;
 
@@ -247,6 +268,7 @@ fn build_manifest_in_memory(
     dir: &Path,
     stats: &mut SnapStats,
     manifests: &mut HashMap<ObjectId, Manifest>,
+    policy: ChunkingPolicy,
 ) -> Result<ObjectId> {
     let mut entries = Vec::new();
     let children = read_dir_sorted(dir)?;
@@ -266,7 +288,7 @@ fn build_manifest_in_memory(
 
         let kind = if file_type.is_dir() {
             stats.dirs += 1;
-            let manifest = build_manifest_in_memory(&path, stats, manifests)?;
+            let manifest = build_manifest_in_memory(&path, stats, manifests, policy)?;
             ManifestEntryKind::Dir { manifest }
         } else if file_type.is_file() {
             let mode = file_mode(&path)?;
@@ -274,8 +296,8 @@ fn build_manifest_in_memory(
                 fs::symlink_metadata(&path).with_context(|| format!("stat {}", path.display()))?;
             let size = meta.len();
 
-            let kind = if size >= CHUNK_THRESHOLD {
-                let recipe = chunk_file_to_recipe_id(&path, size)?;
+            let kind = if size >= policy.threshold {
+                let recipe = chunk_file_to_recipe_id(&path, size, policy.chunk_size)?;
                 ManifestEntryKind::FileChunks { recipe, mode, size }
             } else {
                 let bytes =
@@ -317,10 +339,10 @@ fn build_manifest_in_memory(
     Ok(id)
 }
 
-fn chunk_file_to_recipe_id(path: &Path, size: u64) -> Result<ObjectId> {
+fn chunk_file_to_recipe_id(path: &Path, size: u64, chunk_size: usize) -> Result<ObjectId> {
     let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
     let mut r = BufReader::new(f);
-    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut buf = vec![0u8; chunk_size];
     let mut chunks = Vec::new();
     let mut total: u64 = 0;
 
@@ -355,6 +377,22 @@ fn chunk_file_to_recipe_id(path: &Path, size: u64) -> Result<ObjectId> {
     };
     let bytes = serde_json::to_vec(&recipe).context("serialize recipe")?;
     Ok(hash_bytes(&bytes))
+}
+
+fn chunking_policy_from_config(cfg: Option<&ChunkingConfig>) -> Result<ChunkingPolicy> {
+    let chunk_size = cfg
+        .map(|c| c.chunk_size)
+        .unwrap_or(DEFAULT_CHUNK_SIZE)
+        .max(64 * 1024);
+    let threshold = cfg.map(|c| c.threshold).unwrap_or(DEFAULT_CHUNK_THRESHOLD);
+
+    let chunk_size_usize =
+        usize::try_from(chunk_size).map_err(|_| anyhow!("chunk_size too large: {}", chunk_size))?;
+
+    Ok(ChunkingPolicy {
+        chunk_size: chunk_size_usize,
+        threshold,
+    })
 }
 
 fn should_ignore_name(name: &str) -> bool {

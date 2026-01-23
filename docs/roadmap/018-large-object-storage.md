@@ -1,7 +1,7 @@
 # Phase 018: Large Object Storage, Retention, And Gate Policies
 
 Current status:
-- Not started
+- Implemented (fixed-size chunking MVP): chunked file entry type, local store ingest/restore, publish/fetch over recipes+chunks.
 
 ## Goal
 
@@ -44,28 +44,33 @@ Design targets:
 
 ### A) Data model
 
-- [ ] Define chunk object format and hashing (fixed-size vs content-defined chunking).
-- [ ] Define a file "recipe"/"chunk tree" object that references chunks and reconstructs the file.
-- [ ] Update manifest file entries to reference either:
+- [x] Define chunk object format and hashing (fixed-size chunking; defaults: 4MiB chunks, 8MiB threshold).
+- [x] Define a file "recipe"/"chunk tree" object that references chunks and reconstructs the file.
+- [x] Update manifest file entries to reference either:
   - a whole-file blob (legacy), or
   - a chunk tree root (new)
-- [ ] Version/compat strategy so older snaps remain readable.
+- [x] Version/compat strategy so older snaps remain readable.
 
 ### B) Local store: chunked ingest + restore
 
-- [ ] Stream-chunk file reads (bounded memory), write chunk objects.
-- [ ] Write file recipe objects; update snap manifests accordingly.
-- [ ] Restore file bytes from chunk tree deterministically.
+- [x] Stream-chunk file reads (bounded memory), write chunk objects.
+- [x] Write file recipe objects; update snap manifests accordingly.
+- [x] Restore file bytes from chunk tree deterministically.
 - [ ] Add tests:
   - multi-chunk file roundtrip
   - small edit causes limited new chunks
   - restore determinism across platforms
 
+Defaults and configuration:
+- Defaults: `chunk_size=4MiB`, `threshold=8MiB`.
+- Workspace config: `.converge/config.json` supports `chunking: { chunk_size, threshold }`.
+- TUI: `chunking show|set|reset` (local root context).
+
 ### C) Distribution protocol
 
-- [ ] Extend missing-object discovery to include chunk objects + recipe objects.
+- [x] Extend missing-object discovery to include chunk objects + recipe objects.
 - [ ] Implement resumable, chunk-level upload/download.
-- [ ] Ensure server can validate object availability for a publication/bundle.
+- [x] Ensure server can validate object availability for a publication/bundle.
 
 ### D) Gate policies for large objects
 

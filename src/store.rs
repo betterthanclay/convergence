@@ -48,6 +48,7 @@ impl LocalStore {
         let cfg = WorkspaceConfig {
             version: 1,
             remote: None,
+            chunking: None,
         };
         let cfg_bytes = serde_json::to_vec_pretty(&cfg).context("serialize workspace config")?;
         write_atomic(&root.join("config.json"), &cfg_bytes).context("write config.json")?;
