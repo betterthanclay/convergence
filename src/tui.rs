@@ -285,7 +285,27 @@ impl App {
                         match store.get_resolution(&bid) {
                             Ok(r) => {
                                 if r.root_manifest == root {
-                                    self.super_decisions = r.decisions;
+                                    let mut decisions = r.decisions;
+                                    // Best-effort upgrade of legacy index decisions to keys.
+                                    if r.version == 1 {
+                                        for c in &self.super_conflicts {
+                                            if let Some(ResolutionDecision::Index(i)) =
+                                                decisions.get(&c.path).cloned()
+                                            {
+                                                let idx = i as usize;
+                                                if idx < c.variants.len() {
+                                                    decisions.insert(
+                                                        c.path.clone(),
+                                                        ResolutionDecision::Key(
+                                                            c.variants[idx].key(),
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    self.super_decisions = decisions;
                                     self.super_resolution_created_at = Some(r.created_at);
                                 } else {
                                     self.super_error = Some(
@@ -359,12 +379,39 @@ impl App {
             return;
         };
 
-        // Ensure all conflicts have a decision.
-        for c in &self.super_conflicts {
-            if !self.super_decisions.contains_key(&c.path) {
-                self.super_error = Some(format!("missing decision for {}", c.path));
+        // Validate decisions against the current root manifest.
+        let report = match crate::resolve::validate_resolution(
+            &store,
+            &root_manifest,
+            &self.super_decisions,
+        ) {
+            Ok(r) => r,
+            Err(err) => {
+                self.super_error = Some(format!("validate resolution: {:#}", err));
                 return;
             }
+        };
+
+        if !report.ok {
+            if !report.missing.is_empty() {
+                self.super_error = Some(format!(
+                    "missing decisions for {} paths",
+                    report.missing.len()
+                ));
+            } else if !report.invalid_keys.is_empty() {
+                self.super_error = Some(format!(
+                    "invalid decisions for {} paths (press f to jump)",
+                    report.invalid_keys.len()
+                ));
+            } else if !report.out_of_range.is_empty() {
+                self.super_error = Some(format!(
+                    "out-of-range decisions for {} paths",
+                    report.out_of_range.len()
+                ));
+            } else {
+                self.super_error = Some("resolution invalid".to_string());
+            }
+            return;
         }
 
         if let Err(err) = self.persist_super_resolution() {
@@ -826,6 +873,15 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                 };
                 app.load_superpositions_for_bundle(id, b.root_manifest.clone());
             }
+            KeyCode::Char('f') => {
+                if let Some(next) = next_invalid_superposition(app, app.super_selected) {
+                    app.super_selected = next;
+                    app.super_notice = Some("jumped to invalid decision".to_string());
+                    app.super_error = None;
+                } else {
+                    app.super_notice = Some("no invalid decisions".to_string());
+                }
+            }
             KeyCode::Char('a') => {
                 app.apply_super_resolution(false);
             }
@@ -950,6 +1006,31 @@ fn downstream_gates(graph: &GateGraph, from_gate: &str) -> Vec<String> {
         .collect::<Vec<_>>();
     out.sort();
     out
+}
+
+fn invalid_conflict_index(conflict: &Conflict, decision: &ResolutionDecision) -> bool {
+    match decision {
+        ResolutionDecision::Index(i) => (*i as usize) >= conflict.variants.len(),
+        ResolutionDecision::Key(k) => !conflict.variants.iter().any(|v| &v.key() == k),
+    }
+}
+
+fn next_invalid_superposition(app: &App, from: usize) -> Option<usize> {
+    if app.super_conflicts.is_empty() {
+        return None;
+    }
+
+    let n = app.super_conflicts.len();
+    for off in 1..=n {
+        let idx = (from + off) % n;
+        let c = &app.super_conflicts[idx];
+        if let Some(d) = app.super_decisions.get(&c.path) {
+            if invalid_conflict_index(c, d) {
+                return Some(idx);
+            }
+        }
+    }
+    None
 }
 
 fn draw(frame: &mut ratatui::Frame, app: &App) {
@@ -1079,6 +1160,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
                 Span::raw("  "),
                 Span::styled("o", Style::default().fg(Color::Yellow)),
                 Span::raw(" overview"),
+                Span::raw("  "),
+                Span::styled("f", Style::default().fg(Color::Yellow)),
+                Span::raw(" next invalid"),
                 Span::raw("  "),
                 Span::styled("1-9", Style::default().fg(Color::Yellow)),
                 Span::raw(" pick"),
@@ -1618,15 +1702,28 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
 
     if app.super_loaded {
         let total = app.super_conflicts.len();
-        let decided = app
-            .super_conflicts
-            .iter()
-            .filter(|c| app.super_decisions.contains_key(&c.path))
-            .count();
+        let mut decided_valid = 0usize;
+        let mut invalid = 0usize;
+        for c in &app.super_conflicts {
+            if let Some(d) = app.super_decisions.get(&c.path) {
+                if invalid_conflict_index(c, d) {
+                    invalid += 1;
+                } else {
+                    decided_valid += 1;
+                }
+            }
+        }
         lines.push(Line::from(vec![
             Span::styled("decided: ", Style::default().fg(Color::Gray)),
-            Span::raw(format!("{}/{}", decided, total)),
+            Span::raw(format!("{}/{}", decided_valid, total)),
         ]));
+
+        if invalid > 0 {
+            lines.push(Line::from(vec![
+                Span::styled("invalid: ", Style::default().fg(Color::Gray)),
+                Span::raw(format!("{}", invalid)),
+            ]));
+        }
     }
 
     if let Some(msg) = &app.super_notice {
