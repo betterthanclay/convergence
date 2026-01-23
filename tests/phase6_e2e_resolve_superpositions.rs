@@ -79,7 +79,9 @@ fn collect_superposition_paths(store: &LocalStore, root: &ObjectId) -> Result<Ve
                 ManifestEntryKind::Superposition { .. } => {
                     out.push(path);
                 }
-                ManifestEntryKind::File { .. } | ManifestEntryKind::Symlink { .. } => {}
+                ManifestEntryKind::File { .. }
+                | ManifestEntryKind::FileChunks { .. }
+                | ManifestEntryKind::Symlink { .. } => {}
             }
         }
     }

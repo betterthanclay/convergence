@@ -238,6 +238,10 @@ async fn run() -> Result<()> {
             axum::routing::put(put_manifest).get(get_manifest),
         )
         .route(
+            "/repos/:repo_id/objects/recipes/:recipe_id",
+            axum::routing::put(put_recipe).get(get_recipe),
+        )
+        .route(
             "/repos/:repo_id/objects/snaps/:snap_id",
             axum::routing::put(put_snap).get(get_snap),
         )
@@ -672,6 +676,56 @@ async fn put_manifest(
     Ok(StatusCode::CREATED)
 }
 
+async fn put_recipe(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, recipe_id)): Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Result<StatusCode, Response> {
+    validate_object_id(&recipe_id).map_err(bad_request)?;
+
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_publish(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    let actual = blake3::hash(&body).to_hex().to_string();
+    if actual != recipe_id {
+        return Err(bad_request(anyhow::anyhow!(
+            "recipe hash mismatch (expected {}, got {})",
+            recipe_id,
+            actual
+        )));
+    }
+
+    let recipe: converge::model::FileRecipe =
+        serde_json::from_slice(&body).map_err(|e| bad_request(anyhow::anyhow!(e)))?;
+    if recipe.version != 1 {
+        return Err(bad_request(anyhow::anyhow!("unsupported recipe version")));
+    }
+
+    for c in &recipe.chunks {
+        let p = repo_data_dir(&state, &repo_id)
+            .join("objects/blobs")
+            .join(c.blob.as_str());
+        if !p.exists() {
+            return Err(bad_request(anyhow::anyhow!(
+                "missing referenced blob {}",
+                c.blob.as_str()
+            )));
+        }
+    }
+
+    let path = repo_data_dir(&state, &repo_id)
+        .join("objects/recipes")
+        .join(format!("{}.json", recipe_id));
+    write_if_absent(&path, &body).map_err(internal_error)?;
+    Ok(StatusCode::CREATED)
+}
+
 fn validate_manifest_entry_refs(
     state: &AppState,
     repo_id: &str,
@@ -686,6 +740,17 @@ fn validate_manifest_entry_refs(
                 return Err(bad_request(anyhow::anyhow!(
                     "missing referenced blob {}",
                     blob.as_str()
+                )));
+            }
+        }
+        converge::model::ManifestEntryKind::FileChunks { recipe, .. } => {
+            let p = repo_data_dir(state, repo_id)
+                .join("objects/recipes")
+                .join(format!("{}.json", recipe.as_str()));
+            if !p.exists() {
+                return Err(bad_request(anyhow::anyhow!(
+                    "missing referenced recipe {}",
+                    recipe.as_str()
                 )));
             }
         }
@@ -712,6 +777,17 @@ fn validate_manifest_entry_refs(
                             return Err(bad_request(anyhow::anyhow!(
                                 "missing referenced blob {}",
                                 blob.as_str()
+                            )));
+                        }
+                    }
+                    converge::model::SuperpositionVariantKind::FileChunks { recipe, .. } => {
+                        let p = repo_data_dir(state, repo_id)
+                            .join("objects/recipes")
+                            .join(format!("{}.json", recipe.as_str()));
+                        if !p.exists() {
+                            return Err(bad_request(anyhow::anyhow!(
+                                "missing referenced recipe {}",
+                                recipe.as_str()
                             )));
                         }
                     }
@@ -831,6 +907,7 @@ fn manifest_has_superpositions(
                     }
                 }
                 converge::model::ManifestEntryKind::File { .. } => {}
+                converge::model::ManifestEntryKind::FileChunks { .. } => {}
                 converge::model::ManifestEntryKind::Symlink { .. } => {}
             }
         }
@@ -920,6 +997,9 @@ fn merge_dir_manifests(
             let first = kinds[0].1.clone().unwrap();
             let identical = kinds.iter().all(|(_, k)| match k.clone().unwrap() {
                 converge::model::ManifestEntryKind::File { .. } => k.clone().unwrap() == first,
+                converge::model::ManifestEntryKind::FileChunks { .. } => {
+                    k.clone().unwrap() == first
+                }
                 converge::model::ManifestEntryKind::Symlink { .. } => k.clone().unwrap() == first,
                 _ => false,
             });
@@ -935,6 +1015,9 @@ fn merge_dir_manifests(
             let vkind = match kind {
                 Some(converge::model::ManifestEntryKind::File { blob, mode, size }) => {
                     converge::model::SuperpositionVariantKind::File { blob, mode, size }
+                }
+                Some(converge::model::ManifestEntryKind::FileChunks { recipe, mode, size }) => {
+                    converge::model::SuperpositionVariantKind::FileChunks { recipe, mode, size }
                 }
                 Some(converge::model::ManifestEntryKind::Dir { manifest }) => {
                     converge::model::SuperpositionVariantKind::Dir { manifest }
@@ -1006,6 +1089,40 @@ async fn get_manifest(
     // Validate JSON schema (and fail fast on corruption).
     let _: converge::model::Manifest =
         serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    Ok(json_bytes(bytes))
+}
+
+async fn get_recipe(
+    State(state): State<Arc<AppState>>,
+    Extension(subject): Extension<Subject>,
+    Path((repo_id, recipe_id)): Path<(String, String)>,
+) -> Result<Response, Response> {
+    validate_object_id(&recipe_id).map_err(bad_request)?;
+
+    {
+        let repos = state.repos.read().await;
+        let repo = repos.get(&repo_id).ok_or_else(not_found)?;
+        if !can_read(repo, &subject.user) {
+            return Err(forbidden());
+        }
+    }
+
+    let path = repo_data_dir(&state, &repo_id)
+        .join("objects/recipes")
+        .join(format!("{}.json", recipe_id));
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("read {}", path.display()))
+        .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+    let actual = blake3::hash(&bytes).to_hex().to_string();
+    if actual != recipe_id {
+        return Err(internal_error(anyhow::anyhow!(
+            "recipe integrity check failed"
+        )));
+    }
+
+    let _: converge::model::FileRecipe =
+        serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
+
     Ok(json_bytes(bytes))
 }
 
@@ -1094,6 +1211,7 @@ fn json_bytes(bytes: Vec<u8>) -> Response {
 struct MissingObjectsRequest {
     blobs: Vec<String>,
     manifests: Vec<String>,
+    recipes: Vec<String>,
     snaps: Vec<String>,
 }
 
@@ -1101,6 +1219,7 @@ struct MissingObjectsRequest {
 struct MissingObjectsResponse {
     missing_blobs: Vec<String>,
     missing_manifests: Vec<String>,
+    missing_recipes: Vec<String>,
     missing_snaps: Vec<String>,
 }
 
@@ -1122,6 +1241,7 @@ async fn find_missing_objects(
         .blobs
         .iter()
         .chain(req.manifests.iter())
+        .chain(req.recipes.iter())
         .chain(req.snaps.iter())
     {
         validate_object_id(id).map_err(bad_request)?;
@@ -1145,6 +1265,14 @@ async fn find_missing_objects(
         }
     }
 
+    let mut missing_recipes = Vec::new();
+    for id in req.recipes {
+        let p = root.join("recipes").join(format!("{}.json", id));
+        if !p.exists() {
+            missing_recipes.push(id);
+        }
+    }
+
     let mut missing_snaps = Vec::new();
     for id in req.snaps {
         let p = root.join("snaps").join(format!("{}.json", id));
@@ -1156,6 +1284,7 @@ async fn find_missing_objects(
     Ok(Json(MissingObjectsResponse {
         missing_blobs,
         missing_manifests,
+        missing_recipes,
         missing_snaps,
     }))
 }

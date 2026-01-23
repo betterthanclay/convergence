@@ -1,16 +1,20 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use time::format_description::well_known::Rfc3339;
 
 use crate::model::{
-    Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord, SnapStats,
-    SuperpositionVariantKind, compute_snap_id,
+    FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord,
+    SnapStats, SuperpositionVariantKind, compute_snap_id,
 };
 use crate::store::LocalStore;
 use crate::store::hash_bytes;
+
+const CHUNK_SIZE: usize = 4 * 1024 * 1024;
+const CHUNK_THRESHOLD: u64 = (CHUNK_SIZE as u64) * 2;
 
 #[derive(Clone)]
 pub struct Workspace {
@@ -154,14 +158,24 @@ impl Workspace {
                 let manifest = self.build_manifest(&path, stats)?;
                 ManifestEntryKind::Dir { manifest }
             } else if file_type.is_file() {
-                let bytes =
-                    fs::read(&path).with_context(|| format!("read file {}", path.display()))?;
-                let size = bytes.len() as u64;
-                let blob = self.store.put_blob(&bytes)?;
                 let mode = file_mode(&path)?;
+                let meta = fs::symlink_metadata(&path)
+                    .with_context(|| format!("stat {}", path.display()))?;
+                let size = meta.len();
+
+                let kind = if size >= CHUNK_THRESHOLD {
+                    let recipe = chunk_file_to_recipe_store(&self.store, &path, size)?;
+                    ManifestEntryKind::FileChunks { recipe, mode, size }
+                } else {
+                    let bytes =
+                        fs::read(&path).with_context(|| format!("read file {}", path.display()))?;
+                    let blob = self.store.put_blob(&bytes)?;
+                    ManifestEntryKind::File { blob, mode, size }
+                };
+
                 stats.files += 1;
                 stats.bytes += size;
-                ManifestEntryKind::File { blob, mode, size }
+                kind
             } else if file_type.is_symlink() {
                 let target = fs::read_link(&path)
                     .with_context(|| format!("read symlink {}", path.display()))?;
@@ -190,6 +204,45 @@ impl Workspace {
     }
 }
 
+fn chunk_file_to_recipe_store(store: &LocalStore, path: &Path, size: u64) -> Result<ObjectId> {
+    let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let mut r = BufReader::new(f);
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut chunks = Vec::new();
+    let mut total: u64 = 0;
+
+    loop {
+        let n = r
+            .read(&mut buf)
+            .with_context(|| format!("read {}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        total += n as u64;
+        let blob = store.put_blob(&buf[..n])?;
+        chunks.push(FileRecipeChunk {
+            blob,
+            size: n as u32,
+        });
+    }
+
+    if total != size {
+        anyhow::bail!(
+            "size mismatch while chunking {} (expected {}, got {})",
+            path.display(),
+            size,
+            total
+        );
+    }
+
+    let recipe = FileRecipe {
+        version: 1,
+        size,
+        chunks,
+    };
+    store.put_recipe(&recipe)
+}
+
 fn build_manifest_in_memory(
     dir: &Path,
     stats: &mut SnapStats,
@@ -216,13 +269,24 @@ fn build_manifest_in_memory(
             let manifest = build_manifest_in_memory(&path, stats, manifests)?;
             ManifestEntryKind::Dir { manifest }
         } else if file_type.is_file() {
-            let bytes = fs::read(&path).with_context(|| format!("read file {}", path.display()))?;
-            let size = bytes.len() as u64;
-            let blob = hash_bytes(&bytes);
             let mode = file_mode(&path)?;
+            let meta =
+                fs::symlink_metadata(&path).with_context(|| format!("stat {}", path.display()))?;
+            let size = meta.len();
+
+            let kind = if size >= CHUNK_THRESHOLD {
+                let recipe = chunk_file_to_recipe_id(&path, size)?;
+                ManifestEntryKind::FileChunks { recipe, mode, size }
+            } else {
+                let bytes =
+                    fs::read(&path).with_context(|| format!("read file {}", path.display()))?;
+                let blob = hash_bytes(&bytes);
+                ManifestEntryKind::File { blob, mode, size }
+            };
+
             stats.files += 1;
             stats.bytes += size;
-            ManifestEntryKind::File { blob, mode, size }
+            kind
         } else if file_type.is_symlink() {
             let target =
                 fs::read_link(&path).with_context(|| format!("read symlink {}", path.display()))?;
@@ -251,6 +315,46 @@ fn build_manifest_in_memory(
     let id = hash_bytes(&bytes);
     manifests.insert(id.clone(), manifest);
     Ok(id)
+}
+
+fn chunk_file_to_recipe_id(path: &Path, size: u64) -> Result<ObjectId> {
+    let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let mut r = BufReader::new(f);
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut chunks = Vec::new();
+    let mut total: u64 = 0;
+
+    loop {
+        let n = r
+            .read(&mut buf)
+            .with_context(|| format!("read {}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        total += n as u64;
+        let blob = hash_bytes(&buf[..n]);
+        chunks.push(FileRecipeChunk {
+            blob,
+            size: n as u32,
+        });
+    }
+
+    if total != size {
+        anyhow::bail!(
+            "size mismatch while chunking {} (expected {}, got {})",
+            path.display(),
+            size,
+            total
+        );
+    }
+
+    let recipe = FileRecipe {
+        version: 1,
+        size,
+        chunks,
+    };
+    let bytes = serde_json::to_vec(&recipe).context("serialize recipe")?;
+    Ok(hash_bytes(&bytes))
 }
 
 fn should_ignore_name(name: &str) -> bool {
@@ -344,6 +448,38 @@ fn materialize_manifest(store: &LocalStore, manifest_id: &ObjectId, out_dir: &Pa
                     .with_context(|| format!("write file {}", path.display()))?;
                 set_file_mode(&path, mode)?;
             }
+            ManifestEntryKind::FileChunks { recipe, mode, size } => {
+                let r = store.get_recipe(&recipe)?;
+                if r.size != size {
+                    return Err(anyhow!(
+                        "recipe size mismatch for {} (recipe {}, entry {})",
+                        path.display(),
+                        r.size,
+                        size
+                    ));
+                }
+
+                let f = fs::File::create(&path)
+                    .with_context(|| format!("create file {}", path.display()))?;
+                let mut w = BufWriter::new(f);
+                for c in r.chunks {
+                    let bytes = store.get_blob(&c.blob)?;
+                    if bytes.len() != c.size as usize {
+                        return Err(anyhow!(
+                            "chunk size mismatch for {} (chunk {} expected {}, got {})",
+                            path.display(),
+                            c.blob.as_str(),
+                            c.size,
+                            bytes.len()
+                        ));
+                    }
+                    w.write_all(&bytes)
+                        .with_context(|| format!("write {}", path.display()))?;
+                }
+                w.flush()
+                    .with_context(|| format!("flush {}", path.display()))?;
+                set_file_mode(&path, mode)?;
+            }
             ManifestEntryKind::Symlink { target } => {
                 create_symlink(&target, &path)?;
             }
@@ -353,6 +489,9 @@ fn materialize_manifest(store: &LocalStore, manifest_id: &ObjectId, out_dir: &Pa
                     sources.push(match v.kind {
                         SuperpositionVariantKind::Tombstone => format!("{}: tombstone", v.source),
                         SuperpositionVariantKind::File { .. } => format!("{}: file", v.source),
+                        SuperpositionVariantKind::FileChunks { .. } => {
+                            format!("{}: chunked_file", v.source)
+                        }
                         SuperpositionVariantKind::Dir { .. } => format!("{}: dir", v.source),
                         SuperpositionVariantKind::Symlink { .. } => {
                             format!("{}: symlink", v.source)

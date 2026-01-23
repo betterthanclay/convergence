@@ -9,6 +9,7 @@ use crate::store::LocalStore;
 pub struct MissingObjectsResponse {
     pub missing_blobs: Vec<String>,
     pub missing_manifests: Vec<String>,
+    pub missing_recipes: Vec<String>,
     pub missing_snaps: Vec<String>,
 }
 
@@ -16,6 +17,7 @@ pub struct MissingObjectsResponse {
 struct MissingObjectsRequest {
     blobs: Vec<String>,
     manifests: Vec<String>,
+    recipes: Vec<String>,
     snaps: Vec<String>,
 }
 
@@ -356,7 +358,7 @@ impl RemoteClient {
         gate: &str,
         resolution: Option<PublicationResolution>,
     ) -> Result<Publication> {
-        let (blobs, manifests) = collect_objects(store, &snap.root_manifest)?;
+        let (blobs, manifests, recipes) = collect_objects(store, &snap.root_manifest)?;
         let manifest_order = manifest_postorder(store, &snap.root_manifest)?;
 
         let repo = &self.remote.repo_id;
@@ -367,6 +369,7 @@ impl RemoteClient {
             .json(&MissingObjectsRequest {
                 blobs: blobs.iter().cloned().collect(),
                 manifests: manifests.iter().cloned().collect(),
+                recipes: recipes.iter().cloned().collect(),
                 snaps: vec![snap.id.clone()],
             })
             .send()
@@ -391,6 +394,19 @@ impl RemoteClient {
                 .context("upload blob")?
                 .error_for_status()
                 .context("upload blob status")?;
+        }
+
+        for id in missing.missing_recipes {
+            let rid = ObjectId(id.clone());
+            let bytes = store.get_recipe_bytes(&rid)?;
+            self.client
+                .put(self.url(&format!("/repos/{}/objects/recipes/{}", repo, id)))
+                .header(reqwest::header::AUTHORIZATION, self.auth())
+                .body(bytes)
+                .send()
+                .context("upload recipe")?
+                .error_for_status()
+                .context("upload recipe status")?;
         }
 
         let mut missing_manifests: HashSet<String> =
@@ -497,9 +513,10 @@ impl RemoteClient {
 fn collect_objects(
     store: &LocalStore,
     root: &ObjectId,
-) -> Result<(HashSet<String>, HashSet<String>)> {
+) -> Result<(HashSet<String>, HashSet<String>, HashSet<String>)> {
     let mut blobs = HashSet::new();
     let mut manifests = HashSet::new();
+    let mut recipes = HashSet::new();
     let mut stack = vec![root.clone()];
 
     while let Some(mid) = stack.pop() {
@@ -512,6 +529,13 @@ fn collect_objects(
                 crate::model::ManifestEntryKind::File { blob, .. } => {
                     blobs.insert(blob.as_str().to_string());
                 }
+                crate::model::ManifestEntryKind::FileChunks { recipe, .. } => {
+                    recipes.insert(recipe.as_str().to_string());
+                    let r = store.get_recipe(&recipe)?;
+                    for c in r.chunks {
+                        blobs.insert(c.blob.as_str().to_string());
+                    }
+                }
                 crate::model::ManifestEntryKind::Dir { manifest } => {
                     stack.push(manifest);
                 }
@@ -523,7 +547,7 @@ fn collect_objects(
         }
     }
 
-    Ok((blobs, manifests))
+    Ok((blobs, manifests, recipes))
 }
 
 fn manifest_postorder(store: &LocalStore, root: &ObjectId) -> Result<Vec<ObjectId>> {
@@ -609,79 +633,98 @@ fn fetch_manifest_tree_inner(
                 fetch_manifest_tree_inner(store, remote, repo, &manifest, visited)?;
             }
             crate::model::ManifestEntryKind::File { blob, .. } => {
-                if store.has_blob(&blob) {
-                    continue;
-                }
-                let bytes = remote
-                    .client
-                    .get(remote.url(&format!("/repos/{}/objects/blobs/{}", repo, blob.as_str())))
-                    .header(reqwest::header::AUTHORIZATION, remote.auth())
-                    .send()
-                    .context("fetch blob")?
-                    .error_for_status()
-                    .context("fetch blob status")?
-                    .bytes()
-                    .context("read blob bytes")?;
-
-                let computed = blake3::hash(&bytes).to_hex().to_string();
-                if computed != blob.as_str() {
-                    anyhow::bail!(
-                        "blob hash mismatch (expected {}, got {})",
-                        blob.as_str(),
-                        computed
-                    );
-                }
-                let id = store.put_blob(&bytes)?;
-                if id != blob {
-                    anyhow::bail!("unexpected blob id mismatch");
-                }
+                fetch_blob_if_missing(store, remote, repo, &blob)?;
+            }
+            crate::model::ManifestEntryKind::FileChunks { recipe, .. } => {
+                fetch_recipe_and_chunks(store, remote, repo, &recipe)?;
             }
             crate::model::ManifestEntryKind::Symlink { .. } => {}
             crate::model::ManifestEntryKind::Superposition { variants } => {
                 for v in variants {
                     match v.kind {
                         crate::model::SuperpositionVariantKind::File { blob, .. } => {
-                            if store.has_blob(&blob) {
-                                continue;
-                            }
-                            let bytes = remote
-                                .client
-                                .get(remote.url(&format!(
-                                    "/repos/{}/objects/blobs/{}",
-                                    repo,
-                                    blob.as_str()
-                                )))
-                                .header(reqwest::header::AUTHORIZATION, remote.auth())
-                                .send()
-                                .context("fetch blob")?
-                                .error_for_status()
-                                .context("fetch blob status")?
-                                .bytes()
-                                .context("read blob bytes")?;
-
-                            let computed = blake3::hash(&bytes).to_hex().to_string();
-                            if computed != blob.as_str() {
-                                anyhow::bail!(
-                                    "blob hash mismatch (expected {}, got {})",
-                                    blob.as_str(),
-                                    computed
-                                );
-                            }
-                            let id = store.put_blob(&bytes)?;
-                            if id != blob {
-                                anyhow::bail!("unexpected blob id mismatch");
-                            }
+                            fetch_blob_if_missing(store, remote, repo, &blob)?;
                         }
                         crate::model::SuperpositionVariantKind::Dir { manifest } => {
                             fetch_manifest_tree_inner(store, remote, repo, &manifest, visited)?;
                         }
                         crate::model::SuperpositionVariantKind::Symlink { .. } => {}
                         crate::model::SuperpositionVariantKind::Tombstone => {}
+                        crate::model::SuperpositionVariantKind::FileChunks { recipe, .. } => {
+                            fetch_recipe_and_chunks(store, remote, repo, &recipe)?;
+                        }
                     }
                 }
             }
         }
     }
 
+    Ok(())
+}
+
+fn fetch_blob_if_missing(
+    store: &LocalStore,
+    remote: &RemoteClient,
+    repo: &str,
+    blob: &ObjectId,
+) -> Result<()> {
+    if store.has_blob(blob) {
+        return Ok(());
+    }
+    let bytes = remote
+        .client
+        .get(remote.url(&format!("/repos/{}/objects/blobs/{}", repo, blob.as_str())))
+        .header(reqwest::header::AUTHORIZATION, remote.auth())
+        .send()
+        .context("fetch blob")?
+        .error_for_status()
+        .context("fetch blob status")?
+        .bytes()
+        .context("read blob bytes")?;
+
+    let computed = blake3::hash(&bytes).to_hex().to_string();
+    if computed != blob.as_str() {
+        anyhow::bail!(
+            "blob hash mismatch (expected {}, got {})",
+            blob.as_str(),
+            computed
+        );
+    }
+    let id = store.put_blob(&bytes)?;
+    if &id != blob {
+        anyhow::bail!("unexpected blob id mismatch");
+    }
+    Ok(())
+}
+
+fn fetch_recipe_and_chunks(
+    store: &LocalStore,
+    remote: &RemoteClient,
+    repo: &str,
+    recipe: &ObjectId,
+) -> Result<()> {
+    if !store.has_recipe(recipe) {
+        let bytes = remote
+            .client
+            .get(remote.url(&format!(
+                "/repos/{}/objects/recipes/{}",
+                repo,
+                recipe.as_str()
+            )))
+            .header(reqwest::header::AUTHORIZATION, remote.auth())
+            .send()
+            .context("fetch recipe")?
+            .error_for_status()
+            .context("fetch recipe status")?
+            .bytes()
+            .context("read recipe bytes")?;
+
+        store.put_recipe_bytes(recipe, &bytes)?;
+    }
+
+    let r = store.get_recipe(recipe)?;
+    for c in r.chunks {
+        fetch_blob_if_missing(store, remote, repo, &c.blob)?;
+    }
     Ok(())
 }

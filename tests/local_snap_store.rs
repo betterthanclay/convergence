@@ -71,6 +71,52 @@ fn manifest_is_deterministic_for_same_tree() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn chunked_file_roundtrip() -> Result<()> {
+    let tmp = tempfile::tempdir().context("create tempdir")?;
+    let root = tmp.path();
+
+    let ws = Workspace::init(root, false)?;
+
+    // Force a multi-chunk file (chunking threshold is >= 8MiB).
+    let big_path = root.join("big.bin");
+    {
+        use std::io::Write;
+        let mut f = std::io::BufWriter::new(std::fs::File::create(&big_path)?);
+        let chunk = vec![b'x'; 1024 * 1024];
+        for _ in 0..9 {
+            f.write_all(&chunk)?;
+        }
+        f.flush()?;
+    }
+
+    let expected_hash = blake3::hash(&fs::read(&big_path)?).to_hex().to_string();
+
+    let snap = ws.create_snap(Some("big".to_string()))?;
+
+    // Ensure it was stored as a chunked file entry.
+    let m = ws.store.get_manifest(&snap.root_manifest)?;
+    let e = m
+        .entries
+        .iter()
+        .find(|e| e.name == "big.bin")
+        .context("find big.bin entry")?;
+    let recipe_id = match &e.kind {
+        converge::model::ManifestEntryKind::FileChunks { recipe, .. } => recipe.clone(),
+        other => anyhow::bail!("expected FileChunks, got {:?}", other),
+    };
+    let recipe = ws.store.get_recipe(&recipe_id)?;
+    assert!(recipe.chunks.len() > 1);
+
+    // Mutate, then restore.
+    fs::write(&big_path, b"oops").context("mutate")?;
+    ws.restore_snap(&snap.id, true)?;
+
+    let got_hash = blake3::hash(&fs::read(&big_path)?).to_hex().to_string();
+    assert_eq!(expected_hash, got_hash);
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Node {
     File { bytes: Vec<u8>, mode: u32 },

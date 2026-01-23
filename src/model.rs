@@ -42,6 +42,11 @@ pub enum VariantKeyKind {
         mode: u32,
         size: u64,
     },
+    ChunkedFile {
+        recipe: ObjectId,
+        mode: u32,
+        size: u64,
+    },
     Dir {
         manifest: ObjectId,
     },
@@ -89,6 +94,19 @@ pub struct SnapRecord {
     pub stats: SnapStats,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileRecipeChunk {
+    pub blob: ObjectId,
+    pub size: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileRecipe {
+    pub version: u32,
+    pub size: u64,
+    pub chunks: Vec<FileRecipeChunk>,
+}
+
 pub fn compute_snap_id(created_at: &str, root_manifest: &ObjectId) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(created_at.as_bytes());
@@ -119,6 +137,11 @@ pub enum ManifestEntryKind {
         mode: u32,
         size: u64,
     },
+    FileChunks {
+        recipe: ObjectId,
+        mode: u32,
+        size: u64,
+    },
     Dir {
         manifest: ObjectId,
     },
@@ -146,6 +169,13 @@ impl SuperpositionVariant {
                 mode: *mode,
                 size: *size,
             },
+            SuperpositionVariantKind::FileChunks { recipe, mode, size } => {
+                VariantKeyKind::ChunkedFile {
+                    recipe: recipe.clone(),
+                    mode: *mode,
+                    size: *size,
+                }
+            }
             SuperpositionVariantKind::Dir { manifest } => VariantKeyKind::Dir {
                 manifest: manifest.clone(),
             },
@@ -167,6 +197,11 @@ impl SuperpositionVariant {
 pub enum SuperpositionVariantKind {
     File {
         blob: ObjectId,
+        mode: u32,
+        size: u64,
+    },
+    FileChunks {
+        recipe: ObjectId,
         mode: u32,
         size: u64,
     },

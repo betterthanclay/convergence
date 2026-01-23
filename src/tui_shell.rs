@@ -860,6 +860,18 @@ impl View for SuperpositionsView {
                                 size
                             )));
                         }
+                        crate::model::SuperpositionVariantKind::FileChunks {
+                            recipe,
+                            mode,
+                            size,
+                        } => {
+                            out.push(Line::from(format!(
+                                "    chunked_file recipe={} mode={:#o} size={}",
+                                recipe.as_str(),
+                                mode,
+                                size
+                            )));
+                        }
                         crate::model::SuperpositionVariantKind::Dir { manifest } => {
                             out.push(Line::from(format!(
                                 "    dir manifest={}",
@@ -4393,6 +4405,22 @@ fn diff_dir(
                     },
                 ) => {
                     if b_blob != c_blob || b_mode != c_mode {
+                        out.push((StatusDelta::Modified, path));
+                    }
+                }
+                (
+                    ManifestEntryKind::FileChunks {
+                        recipe: b_r,
+                        mode: b_mode,
+                        ..
+                    },
+                    ManifestEntryKind::FileChunks {
+                        recipe: c_r,
+                        mode: c_mode,
+                        ..
+                    },
+                ) => {
+                    if b_r != c_r || b_mode != c_mode {
                         out.push((StatusDelta::Modified, path));
                     }
                 }

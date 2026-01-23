@@ -54,7 +54,9 @@ pub fn superposition_variants(
                 ManifestEntryKind::Superposition { variants } => {
                     out.insert(path, variants);
                 }
-                ManifestEntryKind::File { .. } | ManifestEntryKind::Symlink { .. } => {}
+                ManifestEntryKind::File { .. }
+                | ManifestEntryKind::FileChunks { .. }
+                | ManifestEntryKind::Symlink { .. } => {}
             }
         }
     }
@@ -261,6 +263,13 @@ pub fn apply_resolution(
                                 size: *size,
                             }
                         }
+                        SuperpositionVariantKind::FileChunks { recipe, mode, size } => {
+                            ManifestEntryKind::FileChunks {
+                                recipe: recipe.clone(),
+                                mode: *mode,
+                                size: *size,
+                            }
+                        }
                         SuperpositionVariantKind::Dir { manifest } => {
                             let rewritten = rewrite(store, manifest, &path, decisions, memo)?;
                             ManifestEntryKind::Dir {
@@ -280,6 +289,9 @@ pub fn apply_resolution(
                 }
                 ManifestEntryKind::File { blob, mode, size } => {
                     ManifestEntryKind::File { blob, mode, size }
+                }
+                ManifestEntryKind::FileChunks { recipe, mode, size } => {
+                    ManifestEntryKind::FileChunks { recipe, mode, size }
                 }
                 ManifestEntryKind::Symlink { target } => ManifestEntryKind::Symlink { target },
             };
