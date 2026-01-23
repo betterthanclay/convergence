@@ -9,6 +9,7 @@ Make resolving superpositions in the TUI faster and safer by surfacing invalid d
 - [x] Superpositions screen shows `valid/total` and `invalid` counts.
 - [x] Superpositions screen can show validation details.
 - [x] Add `f` to jump to the next invalid decision.
+- [x] Add `n` to jump to the next missing decision.
 - [x] Prevent apply/apply+publish when decisions are invalid (explain why).
 
 ## Exit Criteria

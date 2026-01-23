@@ -895,6 +895,15 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                 };
                 app.load_superpositions_for_bundle(id, b.root_manifest.clone());
             }
+            KeyCode::Char('n') => {
+                if let Some(next) = next_missing_superposition(app, app.super_selected) {
+                    app.super_selected = next;
+                    app.super_notice = Some("jumped to missing decision".to_string());
+                    app.super_error = None;
+                } else {
+                    app.super_notice = Some("no missing decisions".to_string());
+                }
+            }
             KeyCode::Char('f') => {
                 if let Some(next) = next_invalid_superposition(app, app.super_selected) {
                     app.super_selected = next;
@@ -1060,6 +1069,22 @@ fn next_invalid_superposition(app: &App, from: usize) -> Option<usize> {
     None
 }
 
+fn next_missing_superposition(app: &App, from: usize) -> Option<usize> {
+    if app.super_conflicts.is_empty() {
+        return None;
+    }
+
+    let n = app.super_conflicts.len();
+    for off in 1..=n {
+        let idx = (from + off) % n;
+        let c = &app.super_conflicts[idx];
+        if !app.super_decisions.contains_key(&c.path) {
+            return Some(idx);
+        }
+    }
+    None
+}
+
 fn draw(frame: &mut ratatui::Frame, app: &App) {
     let area = frame.area();
     let chunks = Layout::default()
@@ -1187,6 +1212,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
                 Span::raw("  "),
                 Span::styled("o", Style::default().fg(Color::Yellow)),
                 Span::raw(" overview"),
+                Span::raw("  "),
+                Span::styled("n", Style::default().fg(Color::Yellow)),
+                Span::raw(" next missing"),
                 Span::raw("  "),
                 Span::styled("f", Style::default().fg(Color::Yellow)),
                 Span::raw(" next invalid"),
@@ -1878,6 +1906,9 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
                 Span::styled("source=", Style::default().fg(Color::Gray)),
                 Span::raw(v.source.as_str()),
             ]));
+
+            let key_json = serde_json::to_string(&v.key()).unwrap_or_else(|_| "<key>".to_string());
+            lines.push(Line::from(format!("  key={}", key_json)));
 
             match &v.kind {
                 SuperpositionVariantKind::File { blob, mode, size } => {

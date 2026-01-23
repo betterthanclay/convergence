@@ -36,4 +36,4 @@ TUI key bindings (current):
 - overview: `i` inbox, `b` bundles, `r` reload
 - inbox: `space` select, `c` create bundle, `/` filter, `r` refresh
 - bundles: `a` approve, `p` promote (with gate chooser if needed), `s` superpositions
-- superpositions: `f` next invalid, `1-9` pick, `0` clear, `a` apply, `p` apply+publish, `r` refresh
+- superpositions: `n` next missing, `f` next invalid, `v` validation, `1-9` pick, `0` clear, `a` apply, `p` apply+publish, `r` refresh
