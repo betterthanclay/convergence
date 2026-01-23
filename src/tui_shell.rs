@@ -249,7 +249,7 @@ struct RootView {
     updated_at: String,
     ctx: RootContext,
     scroll: usize,
-    status_lines: Vec<String>,
+    lines: Vec<String>,
 }
 
 impl RootView {
@@ -258,7 +258,7 @@ impl RootView {
             updated_at: now_ts(),
             ctx,
             scroll: 0,
-            status_lines: Vec::new(),
+            lines: Vec::new(),
         }
     }
 
@@ -268,12 +268,11 @@ impl RootView {
             (RootContext::Local, Some(ws)) => {
                 local_status_lines(ws, ctx).unwrap_or_else(|e| vec![format!("status: {:#}", e)])
             }
-            (RootContext::Remote, Some(ws)) => {
-                remote_status_lines(ws, ctx).unwrap_or_else(|e| vec![format!("status: {:#}", e)])
-            }
+            (RootContext::Remote, Some(ws)) => dashboard_lines(ws, ctx, self.ctx)
+                .unwrap_or_else(|e| vec![format!("dashboard: {:#}", e)]),
         };
 
-        self.status_lines = lines;
+        self.lines = lines;
         self.updated_at = now_ts();
         self.scroll = 0;
     }
@@ -293,7 +292,10 @@ impl View for RootView {
     }
 
     fn title(&self) -> &str {
-        "Root"
+        match self.ctx {
+            RootContext::Local => "Status",
+            RootContext::Remote => "Dashboard",
+        }
     }
 
     fn updated_at(&self) -> &str {
@@ -305,7 +307,7 @@ impl View for RootView {
     }
 
     fn move_down(&mut self) {
-        if self.scroll < self.status_lines.len().saturating_sub(1) {
+        if self.scroll < self.lines.len().saturating_sub(1) {
             self.scroll += 1;
         }
     }
@@ -319,7 +321,7 @@ impl View for RootView {
             .split(inner);
 
         let mut lines = Vec::new();
-        for s in &self.status_lines {
+        for s in &self.lines {
             lines.push(Line::from(s.as_str()));
         }
         if lines.is_empty() {
@@ -334,10 +336,16 @@ impl View for RootView {
             parts[0],
         );
 
-        let footer = vec![
-            Line::from("Commands: status/refresh, help"),
-            Line::from("Tab toggles local/remote; Up/Down scroll"),
-        ];
+        let footer = match self.ctx {
+            RootContext::Local => vec![
+                Line::from("Commands: status/refresh, help"),
+                Line::from("Tab toggles local/remote; Up/Down scroll"),
+            ],
+            RootContext::Remote => vec![
+                Line::from("Commands: refresh, status (details), help"),
+                Line::from("Tab toggles local/remote; Up/Down scroll"),
+            ],
+        };
         frame.render_widget(
             Paragraph::new(footer)
                 .wrap(Wrap { trim: false })
@@ -1020,13 +1028,13 @@ fn local_root_command_defs() -> Vec<CommandDef> {
             name: "status",
             aliases: &["st"],
             usage: "status",
-            help: "Show filesystem status (since latest snap)",
+            help: "Refresh local status root view",
         },
         CommandDef {
             name: "refresh",
             aliases: &["r"],
             usage: "refresh",
-            help: "Refresh root status view",
+            help: "Refresh dashboard",
         },
         CommandDef {
             name: "init",
@@ -1099,13 +1107,13 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
             name: "status",
             aliases: &["st"],
             usage: "status",
-            help: "Show remote status",
+            help: "Show detailed status (modal)",
         },
         CommandDef {
             name: "refresh",
             aliases: &["r"],
             usage: "refresh",
-            help: "Refresh root status view",
+            help: "Refresh dashboard",
         },
         CommandDef {
             name: "remote",
@@ -1949,7 +1957,9 @@ impl App {
             lines.push("- History: Ctrl+p / Ctrl+n.".to_string());
             lines.push("- At root: Tab toggles local/remote.".to_string());
             lines.push("- Prefix with `/` to force root commands.".to_string());
-            lines.push("- Root view: use `refresh` (or `status`) to recompute.".to_string());
+            lines.push("- Root: local shows Status; remote shows Dashboard.".to_string());
+            lines.push("- Use `refresh` to recompute the current root view.".to_string());
+            lines.push("- `status` opens detailed status (and in local-root acts like refresh).".to_string());
             lines.push("- UI: `timefmt` toggles relative/absolute timestamps.".to_string());
             self.open_modal("Help", lines);
             return;
@@ -1998,12 +2008,41 @@ impl App {
     }
 
     fn cmd_status(&mut self, _args: &[String]) {
-        self.refresh_root_view();
-        if self.mode() == UiMode::Root {
+        // Local context: status is the root view.
+        if self.root_ctx == RootContext::Local && self.mode() == UiMode::Root {
+            self.refresh_root_view();
             self.push_output(vec!["refreshed".to_string()]);
-        } else {
-            self.push_output(vec!["status is shown in root view (Esc)".to_string()]);
+            return;
         }
+
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+
+        // Keep dashboard/status view fresh before showing details.
+        self.refresh_root_view();
+
+        let ts_mode = self.ts_mode;
+        let now = OffsetDateTime::now_utc();
+        let rctx = RenderCtx { now, ts_mode };
+
+        let mut lines = Vec::new();
+        lines.push("Local".to_string());
+        lines.push("".to_string());
+        match local_status_lines(&ws, &rctx) {
+            Ok(mut l) => lines.append(&mut l),
+            Err(err) => lines.push(format!("status: {:#}", err)),
+        }
+
+        lines.push("".to_string());
+        lines.push("Remote".to_string());
+        lines.push("".to_string());
+        match remote_status_lines(&ws, &rctx) {
+            Ok(mut l) => lines.append(&mut l),
+            Err(err) => lines.push(format!("status: {:#}", err)),
+        }
+
+        self.open_modal("Status", lines);
     }
 
     fn cmd_init(&mut self, args: &[String]) {
@@ -4651,7 +4690,6 @@ fn local_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     let (cur_root, cur_manifests, _stats) = ws.current_manifest_tree()?;
 
     let mut lines = Vec::new();
-    lines.push(format!("workspace: {}", ws.root.display()));
     if let Some(s) = &baseline {
         let short = s.id.chars().take(8).collect::<String>();
         lines.push(format!(
@@ -4783,6 +4821,296 @@ fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     }
 
     Ok(lines)
+}
+
+fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Result<Vec<String>> {
+    #[derive(Default)]
+    struct LocalSummary {
+        snaps: usize,
+        head: Option<String>,
+        baseline: Option<(String, String)>,
+        changes_total: usize,
+        added: usize,
+        modified: usize,
+        deleted: usize,
+    }
+
+    #[derive(Default)]
+    struct RemoteSummary {
+        configured: bool,
+        healthz: Option<String>,
+        repo: Option<String>,
+        scope: Option<String>,
+        gate: Option<String>,
+        inbox_total: usize,
+        inbox_pending: usize,
+        inbox_resolved: usize,
+        inbox_missing_local: usize,
+        bundles_total: usize,
+        bundles_promotable: usize,
+        bundles_blocked: usize,
+        pinned_bundles: usize,
+        gates_total: usize,
+        terminal_gate: Option<String>,
+    }
+
+    fn local_summary(ws: &Workspace, ctx: &RenderCtx) -> Result<(Vec<String>, LocalSummary)> {
+        let snaps = ws.list_snaps()?;
+        let mut out = Vec::new();
+        let mut sum = LocalSummary::default();
+        sum.snaps = snaps.len();
+
+        let head = ws.store.get_head().ok().flatten();
+        sum.head = head.clone();
+
+        let mut baseline: Option<crate::model::SnapRecord> = None;
+        if let Some(h) = head {
+            if let Ok(s) = ws.show_snap(&h) {
+                baseline = Some(s);
+            }
+        }
+        if baseline.is_none() {
+            baseline = snaps.first().cloned();
+        }
+
+        let (cur_root, cur_manifests, _stats) = ws.current_manifest_tree()?;
+        let changes = if let Some(s) = baseline.clone() {
+            if s.root_manifest == cur_root {
+                Vec::new()
+            } else {
+                diff_trees(&ws.store, Some(&s.root_manifest), &cur_root, &cur_manifests)?
+            }
+        } else {
+            let mut out = Vec::new();
+            collect_leaves_current("", &cur_root, &cur_manifests, StatusDelta::Added, &mut out)?;
+            out
+        };
+
+        sum.changes_total = changes.len();
+        for (k, _) in &changes {
+            match k {
+                StatusDelta::Added => sum.added += 1,
+                StatusDelta::Modified => sum.modified += 1,
+                StatusDelta::Deleted => sum.deleted += 1,
+            }
+        }
+
+        if let Some(s) = &baseline {
+            let short = s.id.chars().take(8).collect::<String>();
+            sum.baseline = Some((short.clone(), fmt_ts_list(&s.created_at, ctx)));
+        }
+
+        out.push("Local".to_string());
+        out.push(format!("workspace: {}", ws.root.display()));
+        out.push(format!(
+            "snaps: {}{}",
+            sum.snaps,
+            sum.head
+                .as_ref()
+                .map(|h| format!(" (head {})", h.chars().take(8).collect::<String>()))
+                .unwrap_or_default()
+        ));
+        if let Some((short, ts)) = &sum.baseline {
+            out.push(format!("baseline: {} {}", short, ts));
+        } else {
+            out.push("baseline: (none yet)".to_string());
+        }
+
+        if sum.changes_total == 0 {
+            out.push("status: Clean".to_string());
+        } else {
+            out.push(format!(
+                "status: {} changes ({}A {}M {}D)",
+                sum.changes_total, sum.added, sum.modified, sum.deleted
+            ));
+        }
+
+        // Config bits that affect “what to do next”.
+        let cfg = ws.store.read_config()?;
+        if let Some(r) = cfg.retention {
+            let mut parts = Vec::new();
+            if let Some(n) = r.keep_last {
+                parts.push(format!("keep_last={}", n));
+            }
+            if let Some(n) = r.keep_days {
+                parts.push(format!("keep_days={}", n));
+            }
+            if !r.pinned.is_empty() {
+                parts.push(format!("pinned={}", r.pinned.len()));
+            }
+            if r.prune_snaps {
+                parts.push("prune_snaps=true".to_string());
+            }
+            if !parts.is_empty() {
+                out.push(format!("retention: {}", parts.join(" ")));
+            }
+        }
+
+        Ok((out, sum))
+    }
+
+    fn remote_summary(ws: &Workspace, ctx: &RenderCtx) -> Result<(Vec<String>, RemoteSummary)> {
+        let mut out = Vec::new();
+        let mut sum = RemoteSummary::default();
+        let cfg = ws.store.read_config()?;
+        let Some(remote) = cfg.remote else {
+            out.push("Remote".to_string());
+            out.push("remote: (not configured)".to_string());
+            out.push("hint: use `remote set ...`".to_string());
+            return Ok((out, sum));
+        };
+
+        sum.configured = true;
+        sum.repo = Some(remote.repo_id.clone());
+        sum.scope = Some(remote.scope.clone());
+        sum.gate = Some(remote.gate.clone());
+
+        out.push("Remote".to_string());
+        out.push(format!("remote: {}", remote.base_url));
+        out.push(format!("repo: {}", remote.repo_id));
+        out.push(format!("scope: {}", remote.scope));
+        out.push(format!("gate: {}", remote.gate));
+
+        // healthz
+        let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
+        let start = std::time::Instant::now();
+        match reqwest::blocking::get(&url) {
+            Ok(r) => {
+                let ms = start.elapsed().as_millis();
+                sum.healthz = Some(format!("{} {}ms", r.status(), ms));
+                out.push(format!("healthz: {} {}ms", r.status(), ms));
+            }
+            Err(err) => {
+                sum.healthz = Some("error".to_string());
+                out.push(format!("healthz: error {:#}", err));
+            }
+        }
+
+        let client = RemoteClient::new(remote.clone())?;
+
+        // Gate graph stats.
+        if let Ok(graph) = client.get_gate_graph() {
+            sum.gates_total = graph.gates.len();
+            sum.terminal_gate = Some(graph.terminal_gate.clone());
+            out.push(format!(
+                "gates: {} (terminal {})",
+                graph.gates.len(),
+                graph.terminal_gate
+            ));
+        }
+
+        // Inbox stats.
+        let mut pubs = client.list_publications()?;
+        pubs.retain(|p| p.scope == remote.scope && p.gate == remote.gate);
+        sum.inbox_total = pubs.len();
+        sum.inbox_resolved = pubs.iter().filter(|p| p.resolution.is_some()).count();
+        sum.inbox_pending = sum.inbox_total.saturating_sub(sum.inbox_resolved);
+        sum.inbox_missing_local = pubs.iter().filter(|p| !ws.store.has_snap(&p.snap_id)).count();
+
+        out.push(format!(
+            "inbox: {} total ({} pending, {} resolved)",
+            sum.inbox_total, sum.inbox_pending, sum.inbox_resolved
+        ));
+        if sum.inbox_missing_local > 0 {
+            out.push(format!(
+                "inbox: {} snaps missing locally (use `fetch`)",
+                sum.inbox_missing_local
+            ));
+        }
+
+        // Bundle stats.
+        let mut bundles = client.list_bundles()?;
+        bundles.retain(|b| b.scope == remote.scope && b.gate == remote.gate);
+        sum.bundles_total = bundles.len();
+        sum.bundles_promotable = bundles.iter().filter(|b| b.promotable).count();
+        sum.bundles_blocked = sum.bundles_total.saturating_sub(sum.bundles_promotable);
+        out.push(format!(
+            "bundles: {} total ({} promotable, {} blocked)",
+            sum.bundles_total, sum.bundles_promotable, sum.bundles_blocked
+        ));
+
+        if let Ok(pins) = client.list_pins() {
+            sum.pinned_bundles = pins.bundles.len();
+            out.push(format!("pinned_bundles: {}", sum.pinned_bundles));
+        }
+
+        // Promotion pointers.
+        let promotion_state = client.promotion_state(&remote.scope)?;
+        if promotion_state.is_empty() {
+            out.push("promotion_state: (none)".to_string());
+        } else {
+            out.push(format!("promotion_state: {} gates", promotion_state.len()));
+        }
+
+        // A tiny recency hint.
+        pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if let Some(p) = pubs.first() {
+            out.push(format!(
+                "latest_publication: {} {}",
+                p.snap_id.chars().take(8).collect::<String>(),
+                fmt_ts_list(&p.created_at, ctx)
+            ));
+        }
+
+        Ok((out, sum))
+    }
+
+    let (local_lines, local) = local_summary(ws, ctx)?;
+    let (remote_lines, remote) = remote_summary(ws, ctx)?;
+
+    let mut actions: Vec<String> = Vec::new();
+    if local.changes_total > 0 {
+        actions.push(format!(
+            "Local: {} unsnapped changes (run `snap`)",
+            local.changes_total
+        ));
+    }
+    if remote.configured && remote.inbox_pending > 0 {
+        actions.push(format!(
+            "Remote: {} inbox items pending (open `inbox`)",
+            remote.inbox_pending
+        ));
+    }
+    if remote.configured && remote.bundles_promotable > 0 {
+        actions.push(format!(
+            "Remote: {} promotable bundles (open `bundles`)",
+            remote.bundles_promotable
+        ));
+    }
+    if remote.configured && remote.inbox_missing_local > 0 {
+        actions.push(format!(
+            "Remote: {} snaps missing locally (run `fetch`)",
+            remote.inbox_missing_local
+        ));
+    }
+
+    let mut out = Vec::new();
+    out.push(format!("context: {}", primary.label()));
+    out.push("".to_string());
+    out.push("Action items".to_string());
+    if actions.is_empty() {
+        out.push("(none)".to_string());
+    } else {
+        for a in actions {
+            out.push(format!("- {}", a));
+        }
+    }
+
+    out.push("".to_string());
+    match primary {
+        RootContext::Local => {
+            out.extend(local_lines);
+            out.push("".to_string());
+            out.extend(remote_lines);
+        }
+        RootContext::Remote => {
+            out.extend(remote_lines);
+            out.push("".to_string());
+            out.extend(local_lines);
+        }
+    }
+
+    Ok(out)
 }
 
 fn diff_trees(
