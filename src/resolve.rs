@@ -52,6 +52,24 @@ pub fn apply_resolution(
     root: &ObjectId,
     decisions: &std::collections::BTreeMap<String, ResolutionDecision>,
 ) -> Result<ObjectId> {
+    // Validate completeness up front so users get a single actionable error.
+    let needed = superposition_variant_counts(store, root)?;
+    if !needed.is_empty() {
+        let mut missing = Vec::new();
+        for path in needed.keys() {
+            if !decisions.contains_key(path) {
+                missing.push(path.clone());
+            }
+        }
+        if !missing.is_empty() {
+            missing.sort();
+            anyhow::bail!(
+                "missing resolution decisions for paths: {}",
+                missing.join(", ")
+            );
+        }
+    }
+
     fn find_variant_index_by_key(
         variants: &[SuperpositionVariant],
         key: &VariantKey,
