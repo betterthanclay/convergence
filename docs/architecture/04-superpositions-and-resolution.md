@@ -65,6 +65,9 @@ CLI:
 - `converge resolve init|pick|clear|show|apply`
 - `converge resolve pick` supports `--variant <n>` or `--key <json>`
 
+Validation:
+- `converge resolve validate --bundle-id <id>` reports missing decisions, invalid keys, and other issues without producing a snap
+
 ## UX constraints (large-org safe)
 
 - Superpositions must be discoverable and inspectable.

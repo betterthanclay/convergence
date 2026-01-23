@@ -20,6 +20,7 @@ use crate::model::{
     SuperpositionVariant, SuperpositionVariantKind,
 };
 use crate::remote::{Bundle, GateGraph, Publication, RemoteClient};
+use crate::resolve::ResolutionValidation;
 use crate::store::LocalStore;
 use crate::workspace::Workspace;
 
@@ -102,6 +103,9 @@ struct App {
     super_decisions: BTreeMap<String, ResolutionDecision>,
     super_resolution_created_at: Option<String>,
     super_notice: Option<String>,
+
+    super_validation: Option<ResolutionValidation>,
+    super_show_validation: bool,
 }
 
 impl App {
@@ -252,6 +256,8 @@ impl App {
         self.super_bundle_id = Some(bundle_id);
         self.super_decisions.clear();
         self.super_resolution_created_at = None;
+        self.super_validation = None;
+        self.super_show_validation = true;
 
         let Some(store) = self.store.clone() else {
             self.super_error = Some("no local store (not in a converge workspace)".to_string());
@@ -321,11 +327,27 @@ impl App {
                         }
                     }
                 }
+
+                self.refresh_super_validation();
             }
             Err(err) => {
                 self.super_error = Some(format!("scan superpositions: {:#}", err));
             }
         }
+    }
+
+    fn refresh_super_validation(&mut self) {
+        let Some(store) = self.store.clone() else {
+            self.super_validation = None;
+            return;
+        };
+        let Some(root) = self.super_root_manifest.clone() else {
+            self.super_validation = None;
+            return;
+        };
+
+        self.super_validation =
+            crate::resolve::validate_resolution(&store, &root, &self.super_decisions).ok();
     }
 
     fn persist_super_resolution(&mut self) -> Result<()> {
@@ -882,6 +904,9 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                     app.super_notice = Some("no invalid decisions".to_string());
                 }
             }
+            KeyCode::Char('v') => {
+                app.super_show_validation = !app.super_show_validation;
+            }
             KeyCode::Char('a') => {
                 app.apply_super_resolution(false);
             }
@@ -907,6 +932,7 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                     } else {
                         app.super_notice = Some(format!("cleared decision for {}", path));
                         app.super_error = None;
+                        app.refresh_super_validation();
                     }
                     return false;
                 }
@@ -933,6 +959,7 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                 } else {
                     app.super_notice = Some(format!("picked variant #{} for {}", idx + 1, path));
                     app.super_error = None;
+                    app.refresh_super_validation();
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
@@ -1163,6 +1190,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
                 Span::raw("  "),
                 Span::styled("f", Style::default().fg(Color::Yellow)),
                 Span::raw(" next invalid"),
+                Span::raw("  "),
+                Span::styled("v", Style::default().fg(Color::Yellow)),
+                Span::raw(" validation"),
                 Span::raw("  "),
                 Span::styled("1-9", Style::default().fg(Color::Yellow)),
                 Span::raw(" pick"),
@@ -1723,6 +1753,64 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
                 Span::styled("invalid: ", Style::default().fg(Color::Gray)),
                 Span::raw(format!("{}", invalid)),
             ]));
+        }
+    }
+
+    if app.super_show_validation {
+        if let Some(report) = &app.super_validation {
+            lines.push(Line::from(""));
+            let status = if report.ok { "ok" } else { "invalid" };
+            let color = if report.ok { Color::Green } else { Color::Red };
+            lines.push(Line::from(vec![
+                Span::styled("validation: ", Style::default().fg(Color::Gray)),
+                Span::styled(status, Style::default().fg(color)),
+            ]));
+
+            if !report.missing.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("missing: ", Style::default().fg(Color::Gray)),
+                    Span::raw(format!("{}", report.missing.len())),
+                ]));
+                for p in report.missing.iter().take(5) {
+                    lines.push(Line::from(format!("  {}", p)));
+                }
+                if report.missing.len() > 5 {
+                    lines.push(Line::from(format!(
+                        "  ... +{} more",
+                        report.missing.len() - 5
+                    )));
+                }
+            }
+
+            if !report.invalid_keys.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("invalid_keys: ", Style::default().fg(Color::Gray)),
+                    Span::raw(format!("{}", report.invalid_keys.len())),
+                ]));
+                for d in report.invalid_keys.iter().take(5) {
+                    lines.push(Line::from(format!("  {}", d.path)));
+                }
+                if report.invalid_keys.len() > 5 {
+                    lines.push(Line::from(format!(
+                        "  ... +{} more",
+                        report.invalid_keys.len() - 5
+                    )));
+                }
+            }
+
+            if !report.out_of_range.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("out_of_range: ", Style::default().fg(Color::Gray)),
+                    Span::raw(format!("{}", report.out_of_range.len())),
+                ]));
+            }
+
+            if !report.extraneous.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("extraneous: ", Style::default().fg(Color::Gray)),
+                    Span::raw(format!("{}", report.extraneous.len())),
+                ]));
+            }
         }
     }
 
