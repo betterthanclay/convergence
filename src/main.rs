@@ -4,11 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use converge::workspace::Workspace;
-use converge::{
-    model::{RemoteConfig, SnapRecord},
-    remote::RemoteClient,
-    store::LocalStore,
-};
+use converge::{model::RemoteConfig, remote::RemoteClient, store::LocalStore};
 
 #[derive(Parser)]
 #[command(name = "converge")]
@@ -153,6 +149,58 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum ResolveCommands {
+    /// Initialize a resolution file for a bundle (does not choose variants)
+    Init {
+        /// Bundle id to resolve
+        #[arg(long)]
+        bundle_id: String,
+        /// Overwrite existing resolution
+        #[arg(long)]
+        force: bool,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Pick a variant for a conflicted path
+    Pick {
+        /// Bundle id
+        #[arg(long)]
+        bundle_id: String,
+        /// Path to resolve (as shown in TUI)
+        #[arg(long)]
+        path: String,
+        /// Variant number (1-based)
+        #[arg(long)]
+        variant: u32,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Clear a previously-picked variant for a conflicted path
+    Clear {
+        /// Bundle id
+        #[arg(long)]
+        bundle_id: String,
+        /// Path to clear
+        #[arg(long)]
+        path: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the current resolution state
+    Show {
+        /// Bundle id
+        #[arg(long)]
+        bundle_id: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Apply a resolution to a bundle root manifest and produce a new snap
     Apply {
         /// Bundle id to resolve
@@ -546,73 +594,226 @@ fn run() -> Result<()> {
             }
         }
 
-        Some(Commands::Resolve {
-            command:
+        Some(Commands::Resolve { command }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            let remote = require_remote(&ws.store)?;
+            let client = RemoteClient::new(remote.clone())?;
+
+            match command {
+                ResolveCommands::Init {
+                    bundle_id,
+                    force,
+                    json,
+                } => {
+                    if ws.store.has_resolution(&bundle_id) && !force {
+                        anyhow::bail!("resolution already exists (use --force to overwrite)");
+                    }
+
+                    let bundle = client.get_bundle(&bundle_id)?;
+                    let root = converge::model::ObjectId(bundle.root_manifest.clone());
+                    client.fetch_manifest_tree(&ws.store, &root)?;
+
+                    let counts = converge::resolve::superposition_variant_counts(&ws.store, &root)?;
+
+                    let created_at = time::OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .context("format time")?;
+                    let resolution = converge::model::Resolution {
+                        version: 1,
+                        bundle_id: bundle_id.clone(),
+                        root_manifest: root,
+                        created_at,
+                        decisions: std::collections::BTreeMap::new(),
+                    };
+                    ws.store.put_resolution(&resolution)?;
+
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "resolution": resolution,
+                                "conflicts": counts
+                            }))
+                            .context("serialize resolve init json")?
+                        );
+                    } else {
+                        println!("Initialized resolution for bundle {}", bundle_id);
+                        if counts.is_empty() {
+                            println!("No superpositions found");
+                        } else {
+                            println!("Conflicts:");
+                            for (p, n) in counts {
+                                println!("{} (variants: {})", p, n);
+                            }
+                        }
+                    }
+                }
+
+                ResolveCommands::Pick {
+                    bundle_id,
+                    path,
+                    variant,
+                    json,
+                } => {
+                    let bundle = client.get_bundle(&bundle_id)?;
+                    let root = converge::model::ObjectId(bundle.root_manifest.clone());
+                    client.fetch_manifest_tree(&ws.store, &root)?;
+                    let counts = converge::resolve::superposition_variant_counts(&ws.store, &root)?;
+                    let Some(vlen) = counts.get(&path).copied() else {
+                        anyhow::bail!("no superposition at path {}", path);
+                    };
+
+                    if variant == 0 {
+                        anyhow::bail!("variant is 1-based (use --variant 1..{})", vlen);
+                    }
+                    let idx = (variant - 1) as usize;
+                    if idx >= vlen {
+                        anyhow::bail!("variant out of range (variants: {})", vlen);
+                    }
+
+                    let mut r = ws.store.get_resolution(&bundle_id)?;
+                    if r.root_manifest != root {
+                        anyhow::bail!(
+                            "resolution root_manifest mismatch (resolution {}, bundle {})",
+                            r.root_manifest.as_str(),
+                            root.as_str()
+                        );
+                    }
+
+                    r.decisions.insert(path.clone(), idx as u32);
+                    ws.store.put_resolution(&r)?;
+
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&r).context("serialize resolution")?
+                        );
+                    } else {
+                        println!("Picked variant #{} for {}", variant, path);
+                    }
+                }
+
+                ResolveCommands::Clear {
+                    bundle_id,
+                    path,
+                    json,
+                } => {
+                    let mut r = ws.store.get_resolution(&bundle_id)?;
+                    r.decisions.remove(&path);
+                    ws.store.put_resolution(&r)?;
+
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&r).context("serialize resolution")?
+                        );
+                    } else {
+                        println!("Cleared decision for {}", path);
+                    }
+                }
+
+                ResolveCommands::Show { bundle_id, json } => {
+                    let r = ws.store.get_resolution(&bundle_id)?;
+                    let counts = converge::resolve::superposition_variant_counts(
+                        &ws.store,
+                        &r.root_manifest,
+                    )
+                    .unwrap_or_default();
+                    let decided = counts
+                        .keys()
+                        .filter(|p| r.decisions.contains_key(*p))
+                        .count();
+
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "resolution": r,
+                                "conflicts": counts,
+                                "decided": decided
+                            }))
+                            .context("serialize resolve show json")?
+                        );
+                    } else {
+                        println!("bundle: {}", r.bundle_id);
+                        println!("root_manifest: {}", r.root_manifest.as_str());
+                        println!("created_at: {}", r.created_at);
+                        println!("decisions: {}", r.decisions.len());
+                        if !counts.is_empty() {
+                            println!("decided: {}/{}", decided, counts.len());
+                        }
+                    }
+                }
+
                 ResolveCommands::Apply {
                     bundle_id,
                     message,
                     publish,
                     json,
-                },
-        }) => {
-            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote.clone())?;
+                } => {
+                    let bundle = client.get_bundle(&bundle_id)?;
 
-            let bundle = client.get_bundle(&bundle_id)?;
+                    // Ensure we can read manifests/blobs needed for applying resolution.
+                    let root = converge::model::ObjectId(bundle.root_manifest.clone());
+                    client.fetch_manifest_tree(&ws.store, &root)?;
 
-            // Ensure we can read manifests/blobs needed for applying resolution.
-            let root = converge::model::ObjectId(bundle.root_manifest.clone());
-            client.fetch_manifest_tree(&ws.store, &root)?;
+                    let resolution = ws.store.get_resolution(&bundle_id)?;
+                    if resolution.root_manifest != root {
+                        anyhow::bail!(
+                            "resolution root_manifest mismatch (resolution {}, bundle {})",
+                            resolution.root_manifest.as_str(),
+                            root.as_str()
+                        );
+                    }
 
-            let resolution = ws.store.get_resolution(&bundle_id)?;
-            if resolution.root_manifest != root {
-                anyhow::bail!(
-                    "resolution root_manifest mismatch (resolution {}, bundle {})",
-                    resolution.root_manifest.as_str(),
-                    root.as_str()
-                );
-            }
+                    let resolved_root = converge::resolve::apply_resolution(
+                        &ws.store,
+                        &root,
+                        &resolution.decisions,
+                    )?;
 
-            let resolved_root =
-                converge::resolve::apply_resolution(&ws.store, &root, &resolution.decisions)?;
+                    let created_at = time::OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .context("format time")?;
+                    let snap_id = converge::model::compute_snap_id(
+                        &created_at,
+                        &resolved_root,
+                        message.as_deref(),
+                    );
 
-            let created_at = time::OffsetDateTime::now_utc()
-                .format(&time::format_description::well_known::Rfc3339)
-                .context("format time")?;
-            let snap_id =
-                converge::model::compute_snap_id(&created_at, &resolved_root, message.as_deref());
+                    let snap = converge::model::SnapRecord {
+                        version: 1,
+                        id: snap_id,
+                        created_at,
+                        root_manifest: resolved_root,
+                        message,
+                        stats: converge::model::SnapStats::default(),
+                    };
 
-            let snap = SnapRecord {
-                version: 1,
-                id: snap_id,
-                created_at,
-                root_manifest: resolved_root,
-                message,
-                stats: converge::model::SnapStats::default(),
-            };
+                    ws.store.put_snap(&snap)?;
 
-            ws.store.put_snap(&snap)?;
+                    let mut pub_id = None;
+                    if publish {
+                        let pubrec =
+                            client.publish_snap(&ws.store, &snap, &remote.scope, &remote.gate)?;
+                        pub_id = Some(pubrec.id);
+                    }
 
-            let mut pub_id = None;
-            if publish {
-                let pubrec = client.publish_snap(&ws.store, &snap, &remote.scope, &remote.gate)?;
-                pub_id = Some(pubrec.id);
-            }
-
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "snap": snap,
-                        "published_publication_id": pub_id
-                    }))
-                    .context("serialize resolve json")?
-                );
-            } else {
-                println!("Resolved snap {}", snap.id);
-                if let Some(pid) = pub_id {
-                    println!("Published {}", pid);
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "snap": snap,
+                                "published_publication_id": pub_id
+                            }))
+                            .context("serialize resolve json")?
+                        );
+                    } else {
+                        println!("Resolved snap {}", snap.id);
+                        if let Some(pid) = pub_id {
+                            println!("Published {}", pid);
+                        }
+                    }
                 }
             }
         }

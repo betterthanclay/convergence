@@ -7,6 +7,37 @@ use crate::model::{
 };
 use crate::store::LocalStore;
 
+pub fn superposition_variant_counts(
+    store: &LocalStore,
+    root: &ObjectId,
+) -> Result<std::collections::BTreeMap<String, usize>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![(String::new(), root.clone())];
+
+    while let Some((prefix, mid)) = stack.pop() {
+        let manifest = store.get_manifest(&mid)?;
+        for e in manifest.entries {
+            let path = if prefix.is_empty() {
+                e.name.clone()
+            } else {
+                format!("{}/{}", prefix, e.name)
+            };
+
+            match e.kind {
+                ManifestEntryKind::Dir { manifest } => {
+                    stack.push((path, manifest));
+                }
+                ManifestEntryKind::Superposition { variants } => {
+                    out.insert(path, variants.len());
+                }
+                ManifestEntryKind::File { .. } | ManifestEntryKind::Symlink { .. } => {}
+            }
+        }
+    }
+
+    Ok(out)
+}
+
 pub fn apply_resolution(
     store: &LocalStore,
     root: &ObjectId,

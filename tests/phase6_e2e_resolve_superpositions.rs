@@ -1,13 +1,12 @@
 mod common;
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use converge::model::{ManifestEntryKind, ObjectId, Resolution};
+use converge::model::{ManifestEntryKind, ObjectId};
 use converge::remote::RemoteClient;
 use converge::store::LocalStore;
 
@@ -137,7 +136,7 @@ fn phase6_e2e_resolve_superpositions_produces_promotable_bundle() -> Result<()> 
     assert!(!bundle.promotable);
     assert!(bundle.reasons.iter().any(|r| r == "superpositions_present"));
 
-    // Create a resolution file by choosing variant #1 for every conflicted path.
+    // Init a resolution, then pick variant #1 for every conflicted path.
     let store = LocalStore::open(ws1.path())?;
     let cfg = store.read_config()?;
     let remote = cfg.remote.context("missing remote config")?;
@@ -151,19 +150,25 @@ fn phase6_e2e_resolve_superpositions_produces_promotable_bundle() -> Result<()> 
         "expected at least one superposition path"
     );
 
-    let mut decisions = BTreeMap::new();
+    run_converge(
+        ws1.path(),
+        &["resolve", "init", "--bundle-id", &bundle.id, "--force"],
+    )?;
     for p in &paths {
-        decisions.insert(p.clone(), 0);
+        run_converge(
+            ws1.path(),
+            &[
+                "resolve",
+                "pick",
+                "--bundle-id",
+                &bundle.id,
+                "--path",
+                p,
+                "--variant",
+                "1",
+            ],
+        )?;
     }
-
-    let resolution = Resolution {
-        version: 1,
-        bundle_id: bundle.id.clone(),
-        root_manifest: root.clone(),
-        created_at: "2026-01-23T00:00:00Z".to_string(),
-        decisions,
-    };
-    store.put_resolution(&resolution)?;
 
     // Apply (twice) and ensure resolved root manifest is deterministic.
     let out1 = run_converge(
