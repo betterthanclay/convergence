@@ -26,6 +26,17 @@ pub struct RemoteConfig {
     pub gate: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Resolution {
+    pub version: u32,
+    pub bundle_id: String,
+    pub root_manifest: ObjectId,
+    pub created_at: String,
+
+    /// Path -> selected variant index
+    pub decisions: std::collections::BTreeMap<String, u32>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SnapStats {
     pub files: u64,

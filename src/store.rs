@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::model::{Manifest, ObjectId, SnapRecord, WorkspaceConfig};
+use crate::model::{Manifest, ObjectId, Resolution, SnapRecord, WorkspaceConfig};
 
 const STORE_DIR: &str = ".converge";
 
@@ -44,6 +44,7 @@ impl LocalStore {
         fs::create_dir_all(root.join("objects/blobs")).context("create blobs dir")?;
         fs::create_dir_all(root.join("objects/manifests")).context("create manifests dir")?;
         fs::create_dir_all(root.join("snaps")).context("create snaps dir")?;
+        fs::create_dir_all(root.join("resolutions")).context("create resolutions dir")?;
 
         let cfg = WorkspaceConfig {
             version: 1,
@@ -208,6 +209,42 @@ impl LocalStore {
             out.push(snap);
         }
         Ok(out)
+    }
+
+    pub fn put_resolution(&self, resolution: &Resolution) -> Result<()> {
+        if resolution.version != 1 {
+            return Err(anyhow!("unsupported resolution version"));
+        }
+        let bytes = serde_json::to_vec_pretty(resolution).context("serialize resolution")?;
+        let path = self
+            .root
+            .join("resolutions")
+            .join(format!("{}.json", resolution.bundle_id));
+        write_atomic(&path, &bytes).context("write resolution")?;
+        Ok(())
+    }
+
+    pub fn get_resolution(&self, bundle_id: &str) -> Result<Resolution> {
+        let path = self
+            .root
+            .join("resolutions")
+            .join(format!("{}.json", bundle_id));
+        let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+        let r: Resolution = serde_json::from_slice(&bytes).context("parse resolution")?;
+        if r.version != 1 {
+            return Err(anyhow!("unsupported resolution version"));
+        }
+        if r.bundle_id != bundle_id {
+            return Err(anyhow!("resolution bundle_id mismatch"));
+        }
+        Ok(r)
+    }
+
+    pub fn has_resolution(&self, bundle_id: &str) -> bool {
+        self.root
+            .join("resolutions")
+            .join(format!("{}.json", bundle_id))
+            .exists()
     }
 }
 

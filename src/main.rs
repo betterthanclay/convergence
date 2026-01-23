@@ -4,7 +4,11 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use converge::workspace::Workspace;
-use converge::{model::RemoteConfig, remote::RemoteClient, store::LocalStore};
+use converge::{
+    model::{RemoteConfig, SnapRecord},
+    remote::RemoteClient,
+    store::LocalStore,
+};
 
 #[derive(Parser)]
 #[command(name = "converge")]
@@ -138,6 +142,31 @@ enum Commands {
         /// Limit number of publications shown
         #[arg(long, default_value_t = 10)]
         limit: usize,
+    },
+
+    /// Resolve superpositions by applying a saved resolution
+    Resolve {
+        #[command(subcommand)]
+        command: ResolveCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ResolveCommands {
+    /// Apply a resolution to a bundle root manifest and produce a new snap
+    Apply {
+        /// Bundle id to resolve
+        #[arg(long)]
+        bundle_id: String,
+        /// Optional snap message
+        #[arg(short = 'm', long)]
+        message: Option<String>,
+        /// Publish the resolved snap to current scope/gate
+        #[arg(long)]
+        publish: bool,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -513,6 +542,77 @@ fn run() -> Result<()> {
                         "{} {} {} {} {}",
                         short, p.created_at, p.publisher, p.scope, present
                     );
+                }
+            }
+        }
+
+        Some(Commands::Resolve {
+            command:
+                ResolveCommands::Apply {
+                    bundle_id,
+                    message,
+                    publish,
+                    json,
+                },
+        }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            let remote = require_remote(&ws.store)?;
+            let client = RemoteClient::new(remote.clone())?;
+
+            let bundle = client.get_bundle(&bundle_id)?;
+
+            // Ensure we can read manifests/blobs needed for applying resolution.
+            let root = converge::model::ObjectId(bundle.root_manifest.clone());
+            client.fetch_manifest_tree(&ws.store, &root)?;
+
+            let resolution = ws.store.get_resolution(&bundle_id)?;
+            if resolution.root_manifest != root {
+                anyhow::bail!(
+                    "resolution root_manifest mismatch (resolution {}, bundle {})",
+                    resolution.root_manifest.as_str(),
+                    root.as_str()
+                );
+            }
+
+            let resolved_root =
+                converge::resolve::apply_resolution(&ws.store, &root, &resolution.decisions)?;
+
+            let created_at = time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .context("format time")?;
+            let snap_id =
+                converge::model::compute_snap_id(&created_at, &resolved_root, message.as_deref());
+
+            let snap = SnapRecord {
+                version: 1,
+                id: snap_id,
+                created_at,
+                root_manifest: resolved_root,
+                message,
+                stats: converge::model::SnapStats::default(),
+            };
+
+            ws.store.put_snap(&snap)?;
+
+            let mut pub_id = None;
+            if publish {
+                let pubrec = client.publish_snap(&ws.store, &snap, &remote.scope, &remote.gate)?;
+                pub_id = Some(pubrec.id);
+            }
+
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "snap": snap,
+                        "published_publication_id": pub_id
+                    }))
+                    .context("serialize resolve json")?
+                );
+            } else {
+                println!("Resolved snap {}", snap.id);
+                if let Some(pid) = pub_id {
+                    println!("Published {}", pid);
                 }
             }
         }

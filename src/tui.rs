@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::{self, IsTerminal};
 use std::time::Duration;
 
@@ -15,7 +15,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
 
-use crate::model::{ManifestEntryKind, ObjectId, SuperpositionVariant, SuperpositionVariantKind};
+use crate::model::{
+    ManifestEntryKind, ObjectId, Resolution, SnapRecord, SnapStats, SuperpositionVariant,
+    SuperpositionVariantKind,
+};
 use crate::remote::{Bundle, GateGraph, Publication, RemoteClient};
 use crate::store::LocalStore;
 use crate::workspace::Workspace;
@@ -95,6 +98,10 @@ struct App {
     super_loaded: bool,
     super_selected: usize,
     super_error: Option<String>,
+
+    super_decisions: BTreeMap<String, u32>,
+    super_resolution_created_at: Option<String>,
+    super_notice: Option<String>,
 }
 
 impl App {
@@ -238,10 +245,13 @@ impl App {
 
     fn load_superpositions_for_bundle(&mut self, bundle_id: String, root_manifest: String) {
         self.super_error = None;
+        self.super_notice = None;
         self.super_conflicts.clear();
         self.super_loaded = false;
         self.super_selected = 0;
         self.super_bundle_id = Some(bundle_id);
+        self.super_decisions.clear();
+        self.super_resolution_created_at = None;
 
         let Some(store) = self.store.clone() else {
             self.super_error = Some("no local store (not in a converge workspace)".to_string());
@@ -268,10 +278,160 @@ impl App {
             Ok(conflicts) => {
                 self.super_conflicts = conflicts;
                 self.super_loaded = true;
+
+                // Best-effort load existing resolution decisions.
+                if let Some(bid) = self.super_bundle_id.clone() {
+                    if store.has_resolution(&bid) {
+                        match store.get_resolution(&bid) {
+                            Ok(r) => {
+                                if r.root_manifest == root {
+                                    self.super_decisions = r.decisions;
+                                    self.super_resolution_created_at = Some(r.created_at);
+                                } else {
+                                    self.super_error = Some(
+                                        "existing resolution root_manifest does not match bundle"
+                                            .to_string(),
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                self.super_error =
+                                    Some(format!("failed to load existing resolution: {:#}", err));
+                            }
+                        }
+                    }
+                }
             }
             Err(err) => {
                 self.super_error = Some(format!("scan superpositions: {:#}", err));
             }
+        }
+    }
+
+    fn persist_super_resolution(&mut self) -> Result<()> {
+        let Some(store) = self.store.clone() else {
+            anyhow::bail!("no local store");
+        };
+        let Some(bundle_id) = self.super_bundle_id.clone() else {
+            anyhow::bail!("no bundle selected");
+        };
+        let Some(root_manifest) = self.super_root_manifest.clone() else {
+            anyhow::bail!("no root manifest loaded");
+        };
+
+        let created_at = match self.super_resolution_created_at.clone() {
+            Some(t) => t,
+            None => {
+                let t = time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .context("format time")?;
+                self.super_resolution_created_at = Some(t.clone());
+                t
+            }
+        };
+
+        let resolution = Resolution {
+            version: 1,
+            bundle_id,
+            root_manifest,
+            created_at,
+            decisions: self.super_decisions.clone(),
+        };
+
+        store.put_resolution(&resolution)?;
+        Ok(())
+    }
+
+    fn apply_super_resolution(&mut self, publish: bool) {
+        self.super_error = None;
+        self.super_notice = None;
+
+        let Some(store) = self.store.clone() else {
+            self.super_error = Some("no local store".to_string());
+            return;
+        };
+        let Some(bundle_id) = self.super_bundle_id.clone() else {
+            self.super_error = Some("no bundle selected".to_string());
+            return;
+        };
+        let Some(root_manifest) = self.super_root_manifest.clone() else {
+            self.super_error = Some("no root manifest loaded".to_string());
+            return;
+        };
+
+        // Ensure all conflicts have a decision.
+        for c in &self.super_conflicts {
+            if !self.super_decisions.contains_key(&c.path) {
+                self.super_error = Some(format!("missing decision for {}", c.path));
+                return;
+            }
+        }
+
+        if let Err(err) = self.persist_super_resolution() {
+            self.super_error = Some(format!("save resolution: {:#}", err));
+            return;
+        }
+
+        let resolved_root =
+            match crate::resolve::apply_resolution(&store, &root_manifest, &self.super_decisions) {
+                Ok(r) => r,
+                Err(err) => {
+                    self.super_error = Some(format!("apply resolution: {:#}", err));
+                    return;
+                }
+            };
+
+        let created_at = match time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+        {
+            Ok(t) => t,
+            Err(err) => {
+                self.super_error = Some(format!("format time: {:#}", err));
+                return;
+            }
+        };
+
+        let short = bundle_id.chars().take(8).collect::<String>();
+        let message = Some(format!("resolve bundle {}", short));
+        let snap_id =
+            crate::model::compute_snap_id(&created_at, &resolved_root, message.as_deref());
+
+        let snap = SnapRecord {
+            version: 1,
+            id: snap_id,
+            created_at,
+            root_manifest: resolved_root,
+            message,
+            stats: SnapStats::default(),
+        };
+
+        if let Err(err) = store.put_snap(&snap) {
+            self.super_error = Some(format!("write snap: {:#}", err));
+            return;
+        }
+
+        if publish {
+            let Some(remote) = self.remote.clone() else {
+                self.super_error = Some("no remote configured".to_string());
+                return;
+            };
+            let client = match self.remote_client() {
+                Ok(c) => c,
+                Err(err) => {
+                    self.super_error = Some(format!("init remote client: {:#}", err));
+                    return;
+                }
+            };
+            if let Err(err) = client.publish_snap(&store, &snap, &remote.scope, &remote.gate) {
+                self.super_error = Some(format!("publish resolved snap: {:#}", err));
+                return;
+            }
+            // Refresh server-backed screens.
+            self.refresh_inbox();
+            self.refresh_bundles();
+            self.super_notice = Some(format!("resolved + published snap {}", snap.id));
+        } else {
+            self.super_notice = Some(format!("resolved snap {}", snap.id));
         }
     }
 }
@@ -666,6 +826,57 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
                 };
                 app.load_superpositions_for_bundle(id, b.root_manifest.clone());
             }
+            KeyCode::Char('a') => {
+                app.apply_super_resolution(false);
+            }
+            KeyCode::Char('p') => {
+                app.apply_super_resolution(true);
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                if !app.super_loaded || app.super_conflicts.is_empty() {
+                    return false;
+                }
+                let sel = app
+                    .super_selected
+                    .min(app.super_conflicts.len().saturating_sub(1));
+                let conflict = &app.super_conflicts[sel];
+
+                let path = conflict.path.clone();
+                let vlen = conflict.variants.len();
+
+                if c == '0' {
+                    app.super_decisions.remove(&path);
+                    if let Err(err) = app.persist_super_resolution() {
+                        app.super_error = Some(format!("save resolution: {:#}", err));
+                    } else {
+                        app.super_notice = Some(format!("cleared decision for {}", path));
+                        app.super_error = None;
+                    }
+                    return false;
+                }
+
+                let idx = match c.to_digit(10) {
+                    Some(d) if d >= 1 => (d - 1) as usize,
+                    _ => return false,
+                };
+
+                if idx >= vlen {
+                    app.super_error = Some(format!(
+                        "variant out of range: {} (variants: {})",
+                        idx + 1,
+                        vlen
+                    ));
+                    return false;
+                }
+
+                app.super_decisions.insert(path.clone(), idx as u32);
+                if let Err(err) = app.persist_super_resolution() {
+                    app.super_error = Some(format!("save resolution: {:#}", err));
+                } else {
+                    app.super_notice = Some(format!("picked variant #{} for {}", idx + 1, path));
+                    app.super_error = None;
+                }
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 app.super_selected = app.super_selected.saturating_add(1);
             }
@@ -866,6 +1077,18 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
                 Span::raw("  "),
                 Span::styled("o", Style::default().fg(Color::Yellow)),
                 Span::raw(" overview"),
+                Span::raw("  "),
+                Span::styled("1-9", Style::default().fg(Color::Yellow)),
+                Span::raw(" pick"),
+                Span::raw("  "),
+                Span::styled("0", Style::default().fg(Color::Yellow)),
+                Span::raw(" clear"),
+                Span::raw("  "),
+                Span::styled("a", Style::default().fg(Color::Yellow)),
+                Span::raw(" apply"),
+                Span::raw("  "),
+                Span::styled("p", Style::default().fg(Color::Yellow)),
+                Span::raw(" apply+publish"),
                 Span::raw("  "),
                 Span::styled("j/k", Style::default().fg(Color::Yellow)),
                 Span::raw(" move"),
@@ -1327,7 +1550,20 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
     } else {
         app.super_conflicts
             .iter()
-            .map(|c| ListItem::new(c.path.clone()))
+            .map(|c| {
+                let mark = match app.super_decisions.get(&c.path).copied() {
+                    None => " ".to_string(),
+                    Some(idx) => {
+                        let n = idx + 1;
+                        if n <= 9 {
+                            format!("{}", n)
+                        } else {
+                            "*".to_string()
+                        }
+                    }
+                };
+                ListItem::new(format!("[{}] {}", mark, c.path))
+            })
             .collect::<Vec<_>>()
     };
 
@@ -1363,6 +1599,26 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
         ]));
     }
 
+    if app.super_loaded {
+        let total = app.super_conflicts.len();
+        let decided = app
+            .super_conflicts
+            .iter()
+            .filter(|c| app.super_decisions.contains_key(&c.path))
+            .count();
+        lines.push(Line::from(vec![
+            Span::styled("decided: ", Style::default().fg(Color::Gray)),
+            Span::raw(format!("{}/{}", decided, total)),
+        ]));
+    }
+
+    if let Some(msg) = &app.super_notice {
+        lines.push(Line::from(vec![
+            Span::styled("note: ", Style::default().fg(Color::Green)),
+            Span::raw(msg.as_str()),
+        ]));
+    }
+
     lines.push(Line::from(""));
 
     if let Some(err) = &app.super_error {
@@ -1384,6 +1640,17 @@ fn draw_superpositions(frame: &mut ratatui::Frame, app: &App, area: Rect) {
             Span::styled("path: ", Style::default().fg(Color::Gray)),
             Span::raw(conflict.path.as_str()),
         ]));
+
+        let chosen = app.super_decisions.get(&conflict.path).copied();
+        let chosen = match chosen {
+            None => "(none)".to_string(),
+            Some(idx) => format!("#{}", idx + 1),
+        };
+        lines.push(Line::from(vec![
+            Span::styled("chosen: ", Style::default().fg(Color::Gray)),
+            Span::raw(chosen),
+        ]));
+
         lines.push(Line::from(vec![
             Span::styled("variants: ", Style::default().fg(Color::Gray)),
             Span::raw(format!("{}", conflict.variants.len())),
