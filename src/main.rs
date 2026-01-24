@@ -59,6 +59,13 @@ enum Commands {
         force: bool,
     },
 
+    /// Move/rename a file or directory within the workspace
+    #[command(name = "mv")]
+    Mv {
+        from: String,
+        to: String,
+    },
+
     /// Configure or show the remote
     Remote {
         #[command(subcommand)]
@@ -364,6 +371,12 @@ fn run() -> Result<()> {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
             ws.restore_snap(&snap_id, force)?;
             println!("Restored {}", snap_id);
+        }
+
+        Some(Commands::Mv { from, to }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            ws.move_path(std::path::Path::new(&from), std::path::Path::new(&to))?;
+            println!("Moved {} -> {}", from, to);
         }
         Some(Commands::Remote { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;

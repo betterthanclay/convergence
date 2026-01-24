@@ -1034,7 +1034,7 @@ fn local_root_command_defs() -> Vec<CommandDef> {
             name: "refresh",
             aliases: &["r"],
             usage: "refresh",
-            help: "Refresh dashboard",
+            help: "Refresh local status root view",
         },
         CommandDef {
             name: "init",
@@ -1073,6 +1073,12 @@ fn local_root_command_defs() -> Vec<CommandDef> {
             help: "Restore a snap into the working directory",
         },
         CommandDef {
+            name: "mv",
+            aliases: &["move"],
+            usage: "mv <from> <to>",
+            help: "Move/rename a path (case-safe)",
+        },
+        CommandDef {
             name: "chunking",
             aliases: &[],
             usage: "chunking show | chunking set --chunk-size-mib N --threshold-mib N | chunking reset",
@@ -1098,6 +1104,187 @@ fn local_root_command_defs() -> Vec<CommandDef> {
         },
     ]);
     out
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum IdentityKey {
+    Blob(String),
+    Recipe(String),
+    Symlink(String),
+}
+
+#[derive(Clone, Debug)]
+enum StatusChange {
+    Added(String),
+    Modified(String),
+    Deleted(String),
+    Renamed { from: String, to: String },
+}
+
+impl StatusChange {
+    fn sort_key(&self) -> (&str, &str) {
+        match self {
+            StatusChange::Added(p) => ("A", p.as_str()),
+            StatusChange::Modified(p) => ("M", p.as_str()),
+            StatusChange::Deleted(p) => ("D", p.as_str()),
+            StatusChange::Renamed { from, .. } => ("R", from.as_str()),
+        }
+    }
+}
+
+fn collect_identities_current(
+    prefix: &str,
+    manifest_id: &ObjectId,
+    cur_manifests: &std::collections::HashMap<ObjectId, Manifest>,
+    out: &mut std::collections::HashMap<String, IdentityKey>,
+) -> Result<()> {
+    let m = cur_manifests
+        .get(manifest_id)
+        .ok_or_else(|| anyhow::anyhow!("missing current manifest {}", manifest_id.as_str()))?;
+    for e in &m.entries {
+        let path = if prefix.is_empty() {
+            e.name.clone()
+        } else {
+            format!("{}/{}", prefix, e.name)
+        };
+        match &e.kind {
+            ManifestEntryKind::Dir { manifest } => {
+                collect_identities_current(&path, manifest, cur_manifests, out)?;
+            }
+            ManifestEntryKind::File { blob, .. } => {
+                out.insert(path, IdentityKey::Blob(blob.as_str().to_string()));
+            }
+            ManifestEntryKind::FileChunks { recipe, .. } => {
+                out.insert(path, IdentityKey::Recipe(recipe.as_str().to_string()));
+            }
+            ManifestEntryKind::Symlink { target } => {
+                out.insert(path, IdentityKey::Symlink(target.clone()));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn collect_identities_base(
+    prefix: &str,
+    store: &LocalStore,
+    manifest_id: &ObjectId,
+    out: &mut std::collections::HashMap<String, IdentityKey>,
+) -> Result<()> {
+    let m = store.get_manifest(manifest_id)?;
+    for e in &m.entries {
+        let path = if prefix.is_empty() {
+            e.name.clone()
+        } else {
+            format!("{}/{}", prefix, e.name)
+        };
+        match &e.kind {
+            ManifestEntryKind::Dir { manifest } => {
+                collect_identities_base(&path, store, manifest, out)?;
+            }
+            ManifestEntryKind::File { blob, .. } => {
+                out.insert(path, IdentityKey::Blob(blob.as_str().to_string()));
+            }
+            ManifestEntryKind::FileChunks { recipe, .. } => {
+                out.insert(path, IdentityKey::Recipe(recipe.as_str().to_string()));
+            }
+            ManifestEntryKind::Symlink { target } => {
+                out.insert(path, IdentityKey::Symlink(target.clone()));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn diff_trees_with_renames(
+    store: &LocalStore,
+    base_root: Option<&ObjectId>,
+    cur_root: &ObjectId,
+    cur_manifests: &std::collections::HashMap<ObjectId, Manifest>,
+) -> Result<Vec<StatusChange>> {
+    let raw = diff_trees(store, base_root, cur_root, cur_manifests)?;
+    let Some(base_root) = base_root else {
+        return Ok(raw
+            .into_iter()
+            .map(|(k, p)| match k {
+                StatusDelta::Added => StatusChange::Added(p),
+                StatusDelta::Modified => StatusChange::Modified(p),
+                StatusDelta::Deleted => StatusChange::Deleted(p),
+            })
+            .collect());
+    };
+
+    let mut base_ids = std::collections::HashMap::new();
+    collect_identities_base("", store, base_root, &mut base_ids)?;
+
+    let mut cur_ids = std::collections::HashMap::new();
+    collect_identities_current("", cur_root, cur_manifests, &mut cur_ids)?;
+
+    let mut added = Vec::new();
+    let mut modified = Vec::new();
+    let mut deleted = Vec::new();
+    for (k, p) in raw {
+        match k {
+            StatusDelta::Added => added.push(p),
+            StatusDelta::Modified => modified.push(p),
+            StatusDelta::Deleted => deleted.push(p),
+        }
+    }
+
+    let mut added_by_id: std::collections::HashMap<IdentityKey, Vec<String>> =
+        std::collections::HashMap::new();
+    for p in &added {
+        if let Some(id) = cur_ids.get(p) {
+            added_by_id.entry(id.clone()).or_default().push(p.clone());
+        }
+    }
+
+    let mut deleted_by_id: std::collections::HashMap<IdentityKey, Vec<String>> =
+        std::collections::HashMap::new();
+    for p in &deleted {
+        if let Some(id) = base_ids.get(p) {
+            deleted_by_id.entry(id.clone()).or_default().push(p.clone());
+        }
+    }
+
+    let mut renames = Vec::new();
+    let mut consumed_added: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut consumed_deleted: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (id, dels) in &deleted_by_id {
+        let Some(adds) = added_by_id.get(id) else {
+            continue;
+        };
+        if dels.len() == 1 && adds.len() == 1 {
+            let from = dels[0].clone();
+            let to = adds[0].clone();
+            consumed_deleted.insert(from.clone());
+            consumed_added.insert(to.clone());
+            renames.push((from, to));
+        }
+    }
+
+    let mut out = Vec::new();
+    for p in modified {
+        out.push(StatusChange::Modified(p));
+    }
+    for (from, to) in renames {
+        out.push(StatusChange::Renamed { from, to });
+    }
+    for p in added {
+        if !consumed_added.contains(&p) {
+            out.push(StatusChange::Added(p));
+        }
+    }
+    for p in deleted {
+        if !consumed_deleted.contains(&p) {
+            out.push(StatusChange::Deleted(p));
+        }
+    }
+
+    out.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
+    Ok(out)
 }
 
 fn remote_root_command_defs() -> Vec<CommandDef> {
@@ -1752,6 +1939,7 @@ impl App {
                 "snaps" => self.cmd_snaps(args),
                 "show" => self.cmd_show(args),
                 "restore" => self.cmd_restore(args),
+                "mv" => self.cmd_mv(args),
                 "chunking" => self.cmd_chunking(args),
                 "gc" => self.cmd_gc(args),
                 "retention" => self.cmd_retention(args),
@@ -1804,7 +1992,7 @@ impl App {
                     self.quit = true;
                 }
 
-                "init" | "snap" | "snaps" | "show" | "restore" | "chunking" => {
+                "init" | "snap" | "snaps" | "show" | "restore" | "mv" | "chunking" => {
                     self.push_error("local command; press Tab to switch to local".to_string());
                 }
 
@@ -2856,6 +3044,26 @@ impl App {
         match ws.restore_snap(&snap_id, force) {
             Ok(()) => self.push_output(vec![format!("restored {}", snap_id)]),
             Err(err) => self.push_error(format!("restore: {:#}", err)),
+        }
+    }
+
+    fn cmd_mv(&mut self, args: &[String]) {
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+        if args.len() != 2 {
+            self.push_error("usage: mv <from> <to>".to_string());
+            return;
+        }
+
+        let from = &args[0];
+        let to = &args[1];
+        match ws.move_path(std::path::Path::new(from), std::path::Path::new(to)) {
+            Ok(()) => {
+                self.push_output(vec![format!("moved {} -> {}", from, to)]);
+                self.refresh_root_view();
+            }
+            Err(err) => self.push_error(format!("mv: {:#}", err)),
         }
     }
 
@@ -4664,16 +4872,6 @@ enum StatusDelta {
     Deleted,
 }
 
-impl StatusDelta {
-    fn tag(self) -> &'static str {
-        match self {
-            StatusDelta::Added => "A",
-            StatusDelta::Modified => "M",
-            StatusDelta::Deleted => "D",
-        }
-    }
-}
-
 fn local_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     let snaps = ws.list_snaps()?;
 
@@ -4701,18 +4899,12 @@ fn local_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
         lines.push("baseline: (none; no snaps yet)".to_string());
     }
 
-    let changes = if let Some(s) = baseline {
-        if s.root_manifest == cur_root {
-            Vec::new()
-        } else {
-            diff_trees(&ws.store, Some(&s.root_manifest), &cur_root, &cur_manifests)?
-        }
-    } else {
-        // No baseline: treat everything as added.
-        let mut out = Vec::new();
-        collect_leaves_current("", &cur_root, &cur_manifests, StatusDelta::Added, &mut out)?;
-        out
-    };
+    let changes = diff_trees_with_renames(
+        &ws.store,
+        baseline.as_ref().map(|s| &s.root_manifest),
+        &cur_root,
+        &cur_manifests,
+    )?;
 
     if changes.is_empty() {
         lines.push("".to_string());
@@ -4723,27 +4915,41 @@ fn local_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     let mut added = 0;
     let mut modified = 0;
     let mut deleted = 0;
-    for (k, _) in &changes {
-        match k {
-            StatusDelta::Added => added += 1,
-            StatusDelta::Modified => modified += 1,
-            StatusDelta::Deleted => deleted += 1,
+    let mut renamed = 0;
+    for c in &changes {
+        match c {
+            StatusChange::Added(_) => added += 1,
+            StatusChange::Modified(_) => modified += 1,
+            StatusChange::Deleted(_) => deleted += 1,
+            StatusChange::Renamed { .. } => renamed += 1,
         }
     }
     lines.push("".to_string());
-    lines.push(format!(
-        "changes: {} added, {} modified, {} deleted",
-        added, modified, deleted
-    ));
+    if renamed > 0 {
+        lines.push(format!(
+            "changes: {} added, {} modified, {} deleted, {} renamed",
+            added, modified, deleted, renamed
+        ));
+    } else {
+        lines.push(format!(
+            "changes: {} added, {} modified, {} deleted",
+            added, modified, deleted
+        ));
+    }
     lines.push("".to_string());
 
     const MAX: usize = 200;
     let more = changes.len().saturating_sub(MAX);
-    for (i, (k, p)) in changes.into_iter().enumerate() {
+    for (i, c) in changes.into_iter().enumerate() {
         if i >= MAX {
             break;
         }
-        lines.push(format!("{} {}", k.tag(), p));
+        match c {
+            StatusChange::Added(p) => lines.push(format!("A {}", p)),
+            StatusChange::Modified(p) => lines.push(format!("M {}", p)),
+            StatusChange::Deleted(p) => lines.push(format!("D {}", p)),
+            StatusChange::Renamed { from, to } => lines.push(format!("R {} -> {}", from, to)),
+        }
     }
     if more > 0 {
         lines.push(format!("... and {} more", more));
@@ -4874,24 +5080,23 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         }
 
         let (cur_root, cur_manifests, _stats) = ws.current_manifest_tree()?;
-        let changes = if let Some(s) = baseline.clone() {
-            if s.root_manifest == cur_root {
-                Vec::new()
-            } else {
-                diff_trees(&ws.store, Some(&s.root_manifest), &cur_root, &cur_manifests)?
-            }
-        } else {
-            let mut out = Vec::new();
-            collect_leaves_current("", &cur_root, &cur_manifests, StatusDelta::Added, &mut out)?;
-            out
-        };
+        let changes = diff_trees_with_renames(
+            &ws.store,
+            baseline.as_ref().map(|s| &s.root_manifest),
+            &cur_root,
+            &cur_manifests,
+        )?;
 
         sum.changes_total = changes.len();
-        for (k, _) in &changes {
-            match k {
-                StatusDelta::Added => sum.added += 1,
-                StatusDelta::Modified => sum.modified += 1,
-                StatusDelta::Deleted => sum.deleted += 1,
+        for c in &changes {
+            match c {
+                StatusChange::Added(_) => sum.added += 1,
+                StatusChange::Modified(_) => sum.modified += 1,
+                StatusChange::Deleted(_) => sum.deleted += 1,
+                StatusChange::Renamed { .. } => {
+                    // For the dashboard summary, treat renames as "modified" for now.
+                    sum.modified += 1;
+                }
             }
         }
 
