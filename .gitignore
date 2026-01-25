@@ -29,3 +29,6 @@ target
 # Local scratch / dev workspaces
 /dev
 /workspace
+
+# Better Context (btca)
+.btca

@@ -1,0 +1,112 @@
+{
+	"$schema": "https://btca.dev/btca.schema.json",
+	"resources": [
+		{
+			"name": "axum",
+			"type": "git",
+			"url": "https://github.com/tokio-rs/axum",
+			"branch": "main",
+			"searchPath": ".",
+			"specialNotes": "Rust web framework used by converge-server. Focus on docs, examples, and extractor/response patterns."
+		},
+		{
+			"name": "tokio",
+			"type": "git",
+			"url": "https://github.com/tokio-rs/tokio",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Async runtime used throughout. Focus on docs + examples for runtime setup and cancellation/shutdown."
+		},
+		{
+			"name": "reqwest",
+			"type": "git",
+			"url": "https://github.com/seanmonstar/reqwest",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "HTTP client used for remote API calls. Focus on blocking client patterns and TLS config."
+		},
+		{
+			"name": "ratatui",
+			"type": "git",
+			"url": "https://github.com/ratatui/ratatui",
+			"branch": "main",
+			"searchPath": ".",
+			"specialNotes": "TUI framework used by converge TUI. Focus on layout/widgets/state patterns."
+		},
+		{
+			"name": "crossterm",
+			"type": "git",
+			"url": "https://github.com/crossterm-rs/crossterm",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Terminal input/output backend for Ratatui. Focus on event handling and raw mode."
+		},
+		{
+			"name": "clap",
+			"type": "git",
+			"url": "https://github.com/clap-rs/clap",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "CLI argument parsing (derive). Focus on subcommand patterns and UX."
+		},
+		{
+			"name": "serde",
+			"type": "git",
+			"url": "https://github.com/serde-rs/serde",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Serialization backbone. Focus on derive attributes and enum tagging strategies."
+		},
+		{
+			"name": "serdeJson",
+			"type": "git",
+			"url": "https://github.com/serde-rs/json",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "JSON serialization used for API + state/config files. Focus on serde_json::Value usage and streaming considerations."
+		},
+		{
+			"name": "time",
+			"type": "git",
+			"url": "https://github.com/time-rs/time",
+			"branch": "main",
+			"searchPath": ".",
+			"specialNotes": "Time formatting/parsing used in CLI/TUI. Focus on Rfc3339 and formatting APIs."
+		},
+		{
+			"name": "anyhow",
+			"type": "git",
+			"url": "https://github.com/dtolnay/anyhow",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Error handling. Focus on Context patterns and best practices."
+		},
+		{
+			"name": "blake3",
+			"type": "git",
+			"url": "https://github.com/BLAKE3-team/BLAKE3",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Hashing used for object ids/integrity. Focus on Rust crate API and performance notes."
+		},
+		{
+			"name": "getrandom",
+			"type": "git",
+			"url": "https://github.com/rust-random/getrandom",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Entropy source for tokens/ids. Focus on platform caveats."
+		},
+		{
+			"name": "tempfile",
+			"type": "git",
+			"url": "https://github.com/Stebalien/tempfile",
+			"branch": "master",
+			"searchPath": ".",
+			"specialNotes": "Temp dirs/files for tests and scratch restores. Focus on security/cleanup patterns."
+		}
+	],
+	"model": "minimax-m2.1-free",
+	"provider": "opencode",
+	"providerTimeoutMs": 300000
+}

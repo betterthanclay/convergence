@@ -56,3 +56,21 @@ When the user replies with "Continue":
 
 Roadmap hygiene:
 - As tasks are completed, tick the corresponding checkboxes in the relevant `docs/roadmap/*.md` file.
+
+## btca
+
+When you need up-to-date information about technologies used in this project, use btca to query source repositories directly.
+
+**Available resources**: axum, tokio, reqwest, ratatui, crossterm, clap, serde, serdeJson, time, anyhow, blake3, getrandom, tempfile
+
+### Usage
+
+```bash
+btca ask -r <resource> -q "<question>"
+```
+
+Use multiple `-r` flags to query multiple resources at once:
+
+```bash
+btca ask -r axum -r tokio -q "How should I structure graceful shutdown in an Axum server using Tokio?"
+```
