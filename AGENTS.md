@@ -57,6 +57,18 @@ When the user replies with "Continue":
 Roadmap hygiene:
 - As tasks are completed, tick the corresponding checkboxes in the relevant `docs/roadmap/*.md` file.
 
+## Testing
+
+Prefer `cargo nextest run` for running the test suite.
+
+Common commands:
+
+```bash
+cargo fmt
+cargo clippy --all-targets -- -D warnings
+cargo nextest run
+```
+
 ## btca
 
 When you need up-to-date information about technologies used in this project, use btca to query source repositories directly.
