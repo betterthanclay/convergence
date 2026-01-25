@@ -2226,7 +2226,7 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
         CommandDef {
             name: "fetch",
             aliases: &[],
-            usage: "fetch [--snap-id <id>] | fetch --lane <lane> [--user <user>]",
+            usage: "fetch [--snap-id <id>] | fetch --lane <lane> [--user <user>] | fetch --bundle-id <id> | fetch --release <channel>",
             help: "Fetch publications or lane heads into local store",
         },
         CommandDef {
@@ -5062,8 +5062,14 @@ impl App {
         };
 
         let mut snap_id: Option<String> = None;
+        let mut bundle_id: Option<String> = None;
+        let mut release: Option<String> = None;
         let mut lane: Option<String> = None;
         let mut user: Option<String> = None;
+
+        let mut restore = false;
+        let mut into: Option<String> = None;
+        let mut force = false;
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {
@@ -5074,6 +5080,22 @@ impl App {
                         return;
                     }
                     snap_id = Some(args[i].clone());
+                }
+                "--bundle-id" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --bundle-id".to_string());
+                        return;
+                    }
+                    bundle_id = Some(args[i].clone());
+                }
+                "--release" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --release".to_string());
+                        return;
+                    }
+                    release = Some(args[i].clone());
                 }
                 "--lane" => {
                     i += 1;
@@ -5091,12 +5113,131 @@ impl App {
                     }
                     user = Some(args[i].clone());
                 }
+                "--restore" => {
+                    restore = true;
+                }
+                "--into" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --into".to_string());
+                        return;
+                    }
+                    into = Some(args[i].clone());
+                }
+                "--force" => {
+                    force = true;
+                }
                 a => {
                     self.push_error(format!("unknown arg: {}", a));
                     return;
                 }
             }
             i += 1;
+        }
+
+        if (bundle_id.is_some() || release.is_some())
+            && (snap_id.is_some() || lane.is_some() || user.is_some())
+        {
+            self.push_error(
+                "fetch: use either --snap-id/--lane, or --bundle-id, or --release".to_string(),
+            );
+            return;
+        }
+
+        if let Some(bundle_id) = bundle_id.as_deref() {
+            let bundle = match client.get_bundle(bundle_id) {
+                Ok(b) => b,
+                Err(err) => {
+                    self.push_error(format!("get bundle: {:#}", err));
+                    return;
+                }
+            };
+            let root = crate::model::ObjectId(bundle.root_manifest.clone());
+            if let Err(err) = client.fetch_manifest_tree(&ws.store, &root) {
+                self.push_error(format!("fetch bundle objects: {:#}", err));
+                return;
+            }
+
+            if restore {
+                let dest = if let Some(p) = into.as_deref() {
+                    std::path::PathBuf::from(p)
+                } else {
+                    let short = bundle.id.chars().take(8).collect::<String>();
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos();
+                    std::env::temp_dir().join(format!("converge-grab-bundle-{}-{}", short, nanos))
+                };
+
+                if let Err(err) = ws.materialize_manifest_to(&root, &dest, force) {
+                    self.push_error(format!("restore: {:#}", err));
+                    return;
+                }
+                self.push_output(vec![format!(
+                    "materialized bundle {} into {}",
+                    bundle.id,
+                    dest.display()
+                )]);
+            } else {
+                self.push_output(vec![format!("fetched bundle {}", bundle.id)]);
+            }
+            self.refresh_root_view();
+            return;
+        }
+
+        if let Some(channel) = release.as_deref() {
+            let rel = match client.get_release(channel) {
+                Ok(r) => r,
+                Err(err) => {
+                    self.push_error(format!("get release: {:#}", err));
+                    return;
+                }
+            };
+            let bundle = match client.get_bundle(&rel.bundle_id) {
+                Ok(b) => b,
+                Err(err) => {
+                    self.push_error(format!("get bundle: {:#}", err));
+                    return;
+                }
+            };
+
+            let root = crate::model::ObjectId(bundle.root_manifest.clone());
+            if let Err(err) = client.fetch_manifest_tree(&ws.store, &root) {
+                self.push_error(format!("fetch release objects: {:#}", err));
+                return;
+            }
+
+            if restore {
+                let dest = if let Some(p) = into.as_deref() {
+                    std::path::PathBuf::from(p)
+                } else {
+                    let short = rel.bundle_id.chars().take(8).collect::<String>();
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos();
+                    std::env::temp_dir().join(format!("converge-grab-release-{}-{}", short, nanos))
+                };
+
+                if let Err(err) = ws.materialize_manifest_to(&root, &dest, force) {
+                    self.push_error(format!("restore: {:#}", err));
+                    return;
+                }
+                self.push_output(vec![format!(
+                    "materialized release {} ({}) into {}",
+                    rel.channel,
+                    rel.bundle_id,
+                    dest.display()
+                )]);
+            } else {
+                self.push_output(vec![format!(
+                    "fetched release {} ({})",
+                    rel.channel, rel.bundle_id
+                )]);
+            }
+            self.refresh_root_view();
+            return;
         }
 
         let res = if let Some(lane) = lane.as_deref() {
@@ -7009,7 +7150,7 @@ fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     if token.is_some() {
         lines.push("token: (configured)".to_string());
     } else {
-        lines.push("token: (missing; run `remote set --token ...`)".to_string());
+        lines.push("token: (missing; run `login --url ... --token ... --repo ...`)".to_string());
         return Ok(lines);
     }
 
@@ -7099,6 +7240,8 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         bundles_promotable: usize,
         bundles_blocked: usize,
         pinned_bundles: usize,
+        releases_total: usize,
+        releases_channels: usize,
         gates_total: usize,
         terminal_gate: Option<String>,
     }
@@ -7207,7 +7350,10 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         let Some(remote) = cfg.remote else {
             out.push("Remote".to_string());
             out.push("remote: (not configured)".to_string());
-            out.push("hint: use `remote set ...`".to_string());
+            out.push(
+                "hint: login --url <url> --token <token> --repo <id> [--scope <id>] [--gate <id>]"
+                    .to_string(),
+            );
             return Ok((out, sum));
         };
 
@@ -7226,7 +7372,7 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         if token.is_some() {
             out.push("token: (configured)".to_string());
         } else {
-            out.push("token: (missing; run `remote set --token ...`)".to_string());
+            out.push("token: (missing; run `login --url ... --token ... --repo ...`)".to_string());
             return Ok((out, sum));
         }
 
@@ -7302,6 +7448,47 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
             out.push("promotion_state: (none)".to_string());
         } else {
             out.push(format!("promotion_state: {} gates", promotion_state.len()));
+        }
+
+        // Release summary.
+        if let Ok(releases) = client.list_releases() {
+            sum.releases_total = releases.len();
+            let mut latest: std::collections::HashMap<String, crate::remote::Release> =
+                std::collections::HashMap::new();
+            for r in releases {
+                match latest.get(&r.channel) {
+                    None => {
+                        latest.insert(r.channel.clone(), r);
+                    }
+                    Some(prev) => {
+                        if r.released_at > prev.released_at {
+                            latest.insert(r.channel.clone(), r);
+                        }
+                    }
+                }
+            }
+            sum.releases_channels = latest.len();
+            if sum.releases_total == 0 {
+                out.push("releases: (none)".to_string());
+            } else {
+                out.push(format!(
+                    "releases: {} total ({} channels)",
+                    sum.releases_total, sum.releases_channels
+                ));
+                let mut keys = latest.keys().cloned().collect::<Vec<_>>();
+                keys.sort();
+                for ch in keys.into_iter().take(3) {
+                    if let Some(r) = latest.get(&ch) {
+                        let short = r.bundle_id.chars().take(8).collect::<String>();
+                        out.push(format!(
+                            "release: {} {} {}",
+                            ch,
+                            short,
+                            fmt_ts_list(&r.released_at, ctx)
+                        ));
+                    }
+                }
+            }
         }
 
         // A tiny recency hint.

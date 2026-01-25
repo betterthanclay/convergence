@@ -1478,6 +1478,24 @@ fn run() -> Result<()> {
             pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
             pubs.truncate(limit);
             let promotion_state = client.promotion_state(&remote.scope)?;
+            let releases = client.list_releases().unwrap_or_default();
+
+            let mut latest_by_channel: std::collections::BTreeMap<
+                String,
+                converge::remote::Release,
+            > = std::collections::BTreeMap::new();
+            for r in releases {
+                match latest_by_channel.get(&r.channel) {
+                    None => {
+                        latest_by_channel.insert(r.channel.clone(), r);
+                    }
+                    Some(prev) => {
+                        if r.released_at > prev.released_at {
+                            latest_by_channel.insert(r.channel.clone(), r);
+                        }
+                    }
+                }
+            }
 
             if json {
                 let remote_json = serde_json::json!({
@@ -1506,7 +1524,8 @@ fn run() -> Result<()> {
                     serde_json::to_string_pretty(&serde_json::json!({
                         "remote": remote_json,
                         "publications": pubs_json,
-                        "promotion_state": promotion_state
+                        "promotion_state": promotion_state,
+                        "releases": latest_by_channel.values().collect::<Vec<_>>()
                     }))
                     .context("serialize status json")?
                 );
@@ -1515,6 +1534,17 @@ fn run() -> Result<()> {
                 println!("repo: {}", remote.repo_id);
                 println!("scope: {}", remote.scope);
                 println!("gate: {}", remote.gate);
+
+                println!("releases:");
+                if latest_by_channel.is_empty() {
+                    println!("(none)");
+                } else {
+                    for (ch, r) in &latest_by_channel {
+                        let short = r.bundle_id.chars().take(8).collect::<String>();
+                        println!("{} {} {} {}", ch, short, r.released_at, r.released_by);
+                    }
+                }
+
                 println!("promotion_state:");
                 if promotion_state.is_empty() {
                     println!("(none)");
