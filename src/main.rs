@@ -559,8 +559,8 @@ enum RemoteCommands {
         json: bool,
     },
 
-    /// Run remote garbage collection (dev server)
-    Gc {
+    /// Purge remote objects/metadata (dev server)
+    Purge {
         /// Dry run (default true)
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         dry_run: bool,
@@ -770,7 +770,7 @@ fn run() -> Result<()> {
                     }
                 }
 
-                RemoteCommands::Gc {
+                RemoteCommands::Purge {
                     dry_run,
                     prune_metadata,
                     prune_releases_keep_last,
@@ -783,7 +783,8 @@ fn run() -> Result<()> {
                     if json {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&report).context("serialize gc json")?
+                            serde_json::to_string_pretty(&report)
+                                .context("serialize purge json")?
                         );
                     } else {
                         let kept = report.get("kept").and_then(|v| v.as_object());

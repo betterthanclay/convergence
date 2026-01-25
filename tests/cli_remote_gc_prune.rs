@@ -25,7 +25,7 @@ fn ensure_ok(label: &str, out: &std::process::Output) -> Result<()> {
 }
 
 #[test]
-fn cli_remote_gc_can_prune_release_history() -> Result<()> {
+fn cli_remote_purge_can_prune_release_history() -> Result<()> {
     let server = common::spawn_server()?;
     let client = reqwest::blocking::Client::new();
     let auth = common::auth_header(&server.token);
@@ -241,7 +241,7 @@ fn cli_remote_gc_can_prune_release_history() -> Result<()> {
         ws.path(),
         &[
             "remote",
-            "gc",
+            "purge",
             "--dry-run",
             "false",
             "--prune-metadata",
@@ -251,7 +251,7 @@ fn cli_remote_gc_can_prune_release_history() -> Result<()> {
             "--json",
         ],
     )?;
-    ensure_ok("remote gc", &out)?;
+    ensure_ok("remote purge", &out)?;
 
     // Only one release remains.
     let rels: Vec<serde_json::Value> = client

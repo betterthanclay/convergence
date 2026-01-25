@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 mod common;
 
 #[test]
-fn cli_remote_gc_runs_and_returns_json() -> Result<()> {
+fn cli_remote_purge_runs_and_returns_json() -> Result<()> {
     let server = common::spawn_server()?;
 
     let ws = tempfile::tempdir().context("create ws")?;
@@ -45,18 +45,18 @@ fn cli_remote_gc_runs_and_returns_json() -> Result<()> {
 
     let out = Command::new(env!("CARGO_BIN_EXE_converge"))
         .current_dir(ws.path())
-        .args(["remote", "gc", "--json"])
+        .args(["remote", "purge", "--json"])
         .output()
-        .context("remote gc")?;
+        .context("remote purge")?;
     anyhow::ensure!(
         out.status.success(),
-        "remote gc failed\nstdout:\n{}\nstderr:\n{}",
+        "remote purge failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
 
     let s = String::from_utf8_lossy(&out.stdout);
-    let v: serde_json::Value = serde_json::from_str(&s).context("parse gc json")?;
+    let v: serde_json::Value = serde_json::from_str(&s).context("parse purge json")?;
     anyhow::ensure!(v.get("kept").is_some());
     anyhow::ensure!(v.get("deleted").is_some());
 

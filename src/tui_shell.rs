@@ -164,6 +164,13 @@ struct ScrollEntry {
 enum ModalKind {
     Viewer,
     SnapMessage { snap_id: String },
+    ConfirmAction { action: PendingAction },
+}
+
+#[derive(Debug, Clone)]
+enum PendingAction {
+    Root { root_ctx: RootContext, cmd: String },
+    Mode { mode: UiMode, cmd: String },
 }
 
 #[derive(Debug)]
@@ -621,52 +628,12 @@ fn input_hint_left(app: &App) -> Option<String> {
         return None;
     }
 
-    match app.mode() {
-        UiMode::Root => match app.root_ctx {
-            RootContext::Local => {
-                if app.workspace.is_none() {
-                    return Some("init".to_string());
-                }
-
-                let mut changes = 0usize;
-                if let Some(v) = app.current_view::<RootView>() {
-                    changes = v.change_summary.added
-                        + v.change_summary.modified
-                        + v.change_summary.deleted
-                        + v.change_summary.renamed;
-                }
-
-                if changes > 0 {
-                    Some("save  |  history".to_string())
-                } else if app.remote_configured {
-                    let latest = app.latest_snap_id.clone();
-                    let synced = app.lane_last_synced.get("default").cloned();
-                    if latest.is_some() && latest != synced {
-                        Some("sync  |  history".to_string())
-                    } else if latest.is_some() && latest != app.last_published_snap_id {
-                        Some("publish  |  history".to_string())
-                    } else {
-                        Some("history".to_string())
-                    }
-                } else {
-                    Some("history".to_string())
-                }
-            }
-            RootContext::Remote => {
-                if !app.remote_configured || app.remote_identity.is_none() {
-                    Some("login".to_string())
-                } else {
-                    Some("inbox  |  releases".to_string())
-                }
-            }
-        },
-        UiMode::Snaps => Some("Enter: show  |  restore".to_string()),
-        UiMode::Inbox => Some("Enter: fetch  |  bundle".to_string()),
-        UiMode::Bundles => Some("promote  |  release".to_string()),
-        UiMode::Releases => Some("Enter: fetch".to_string()),
-        UiMode::Lanes => Some("Enter: fetch".to_string()),
-        UiMode::Superpositions => Some("pick  |  apply".to_string()),
+    let cmds = app.primary_hint_commands();
+    if cmds.is_empty() {
+        return None;
     }
+
+    Some(cmds.join(" | "))
 }
 
 fn input_hint_right(app: &App) -> Option<(Line<'static>, usize)> {
@@ -1748,10 +1715,10 @@ fn local_root_command_defs() -> Vec<CommandDef> {
             help: "Configure chunked-file snapping",
         },
         CommandDef {
-            name: "gc",
+            name: "purge",
             aliases: &[],
-            usage: "gc [--dry-run]",
-            help: "Garbage-collect local objects (per retention policy)",
+            usage: "purge [--dry-run]",
+            help: "Purge local objects (per retention policy)",
         },
         CommandDef {
             name: "retention",
@@ -2440,33 +2407,8 @@ fn root_command_defs(ctx: RootContext) -> Vec<CommandDef> {
     }
 }
 
-fn mode_specific_command_defs(mode: UiMode) -> Vec<CommandDef> {
-    match mode {
-        UiMode::Root => Vec::new(),
-        UiMode::Snaps => snaps_command_defs(),
-        UiMode::Inbox => inbox_command_defs(),
-        UiMode::Bundles => bundles_command_defs(),
-        UiMode::Releases => releases_command_defs(),
-        UiMode::Lanes => lanes_command_defs(),
-        UiMode::Superpositions => superpositions_command_defs(),
-    }
-}
-
-fn palette_command_defs(mode: UiMode, root_ctx: RootContext) -> Vec<CommandDef> {
-    // A "full" palette: root commands + the current mode's commands.
-    // This keeps the default UI calm while still making everything discoverable.
-    let mut all = root_command_defs(root_ctx);
-    all.extend(mode_specific_command_defs(mode));
-
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for d in all {
-        if seen.insert(d.name) {
-            out.push(d);
-        }
-    }
-    out
-}
+// Note: we intentionally avoid a "global" palette. `/` should show only what is available
+// in the current context to keep the UI non-overwhelming.
 
 fn snaps_command_defs() -> Vec<CommandDef> {
     vec![
@@ -2751,6 +2693,8 @@ struct App {
     suggestions: Vec<CommandDef>,
     suggestion_selected: usize,
 
+    hint_rotation: [usize; 8],
+
     frames: Vec<ViewFrame>,
 
     quit: bool,
@@ -2777,6 +2721,8 @@ impl Default for App {
             input: Input::default(),
             suggestions: Vec::new(),
             suggestion_selected: 0,
+
+            hint_rotation: [0; 8],
             frames: vec![ViewFrame {
                 view: Box::new(RootView::new(RootContext::Local)),
             }],
@@ -2786,16 +2732,88 @@ impl Default for App {
 }
 
 impl App {
-    fn run_default_action(&mut self) {
+    fn available_command_defs(&self) -> Vec<CommandDef> {
+        let mode = self.mode();
+        let root_ctx = self.root_ctx;
+        let mut defs = mode_command_defs(mode, root_ctx);
+
+        // If the workspace isn't initialized, only offer init + global navigation.
+        if mode == UiMode::Root && root_ctx == RootContext::Local && self.workspace.is_none() {
+            let can_init = self
+                .workspace_err
+                .as_deref()
+                .is_some_and(|e| e.contains("No .converge directory found"));
+
+            defs.retain(|d| {
+                d.name == "help"
+                    || d.name == "quit"
+                    || d.name == "clear"
+                    || (can_init && d.name == "init")
+            });
+        }
+
+        // If remote isn't ready, only offer login + global navigation.
+        if mode == UiMode::Root
+            && root_ctx == RootContext::Remote
+            && (!self.remote_configured || self.remote_identity.is_none())
+        {
+            defs.retain(|d| {
+                d.name == "login" || d.name == "help" || d.name == "quit" || d.name == "clear"
+            });
+        }
+
+        defs
+    }
+
+    fn hint_key(&self) -> usize {
+        match (self.mode(), self.root_ctx) {
+            (UiMode::Root, RootContext::Local) => 0,
+            (UiMode::Root, RootContext::Remote) => 1,
+            (UiMode::Snaps, _) => 2,
+            (UiMode::Inbox, _) => 3,
+            (UiMode::Bundles, _) => 4,
+            (UiMode::Releases, _) => 5,
+            (UiMode::Lanes, _) => 6,
+            (UiMode::Superpositions, _) => 7,
+        }
+    }
+
+    fn rotate_hint(&mut self, dir: i32) {
+        if !self.input.buf.is_empty() || self.modal.is_some() {
+            return;
+        }
+
+        let n = self.hint_commands_raw().len();
+        if n <= 1 {
+            self.hint_rotation[self.hint_key()] = 0;
+            return;
+        }
+
+        let key = self.hint_key();
+
+        if dir > 0 {
+            self.hint_rotation[key] = (self.hint_rotation[key] + 1) % n;
+        } else if dir < 0 {
+            self.hint_rotation[key] = (self.hint_rotation[key] + n - 1) % n;
+        }
+    }
+
+    fn hint_commands_raw(&self) -> Vec<String> {
         match self.mode() {
             UiMode::Root => match self.root_ctx {
                 RootContext::Local => {
                     if self.workspace.is_none() {
-                        self.cmd_init(&[]);
-                        return;
+                        // Only suggest init if we're truly uninitialized.
+                        if self
+                            .workspace_err
+                            .as_deref()
+                            .is_some_and(|e| e.contains("No .converge directory found"))
+                        {
+                            return vec!["init".to_string()];
+                        }
+                        return Vec::new();
                     }
 
-                    // If there are local changes, the default action is "save".
                     let mut changes = 0usize;
                     if let Some(v) = self.current_view::<RootView>() {
                         changes = v.change_summary.added
@@ -2804,53 +2822,161 @@ impl App {
                             + v.change_summary.renamed;
                     }
                     if changes > 0 {
-                        self.cmd_snap(&[]);
-                        return;
+                        return vec!["save".to_string(), "history".to_string()];
                     }
 
-                    // Otherwise, default to opening history.
-                    self.cmd_snaps(&[]);
+                    if self.remote_configured {
+                        let latest = self.latest_snap_id.clone();
+                        let synced = self.lane_last_synced.get("default").cloned();
+                        if latest.is_some() && latest != synced {
+                            return vec!["sync".to_string(), "history".to_string()];
+                        }
+                        if latest.is_some() && latest != self.last_published_snap_id {
+                            return vec!["publish".to_string(), "history".to_string()];
+                        }
+                    }
+
+                    vec!["history".to_string()]
                 }
                 RootContext::Remote => {
                     if !self.remote_configured || self.remote_identity.is_none() {
-                        self.open_modal(
-                            "Login",
-                            vec![
-                                "Remote is not ready yet.".to_string(),
-                                "".to_string(),
-                                "Use: login --url <url> --token <token> --repo <id>".to_string(),
-                            ],
-                        );
-                        return;
+                        vec!["login".to_string()]
+                    } else {
+                        vec!["inbox".to_string(), "releases".to_string()]
                     }
-                    self.cmd_inbox(&[]);
                 }
             },
-            UiMode::Snaps => self.cmd_snaps_show(&[]),
-            UiMode::Inbox => self.cmd_inbox_fetch_mode(&[]),
-            UiMode::Releases => self.cmd_releases_fetch_mode(&[]),
-            UiMode::Lanes => self.cmd_lanes_fetch_mode(&[]),
+            UiMode::Snaps => vec!["show".to_string(), "restore".to_string()],
+            UiMode::Inbox => vec!["fetch".to_string(), "bundle".to_string()],
+            UiMode::Releases => vec!["fetch".to_string(), "back".to_string()],
+            UiMode::Lanes => vec!["fetch".to_string(), "back".to_string()],
             UiMode::Bundles => {
-                // If a bundle is blocked by superpositions, default to opening the resolver.
                 let Some(v) = self.current_view::<BundlesView>() else {
-                    return;
+                    return Vec::new();
                 };
                 if v.items.is_empty() {
-                    return;
+                    return vec!["back".to_string()];
                 }
                 let idx = v.selected.min(v.items.len().saturating_sub(1));
                 let b = &v.items[idx];
-                let looks_like_superpositions = !b.promotable
-                    && b.reasons
-                        .iter()
-                        .any(|r| r.to_lowercase().contains("superposition"));
-                if looks_like_superpositions {
-                    self.cmd_bundles_superpositions_mode(&[]);
+
+                if b.reasons.iter().any(|r| r == "superpositions_present") {
+                    return vec!["superpositions".to_string(), "back".to_string()];
                 }
+                if b.reasons.iter().any(|r| r == "approvals_missing") {
+                    return vec!["approve".to_string(), "back".to_string()];
+                }
+                if b.promotable {
+                    return vec!["promote".to_string(), "back".to_string()];
+                }
+
+                vec!["back".to_string()]
             }
             UiMode::Superpositions => {
-                // No automatic default action; this mode is intentionally explicit.
+                let Some(v) = self.current_view::<SuperpositionsView>() else {
+                    return Vec::new();
+                };
+                let missing = v
+                    .validation
+                    .as_ref()
+                    .map(|x| !x.missing.is_empty())
+                    .unwrap_or(false);
+                if missing {
+                    vec!["next-missing".to_string(), "pick".to_string()]
+                } else {
+                    vec!["apply".to_string(), "back".to_string()]
+                }
             }
+        }
+    }
+
+    fn primary_hint_commands(&self) -> Vec<String> {
+        let raw = self.hint_commands_raw();
+        if raw.is_empty() {
+            return raw;
+        }
+        let n = raw.len();
+        let rot = self.hint_rotation[self.hint_key()] % n;
+        if rot == 0 {
+            return raw;
+        }
+        raw.into_iter().cycle().skip(rot).take(n).collect()
+    }
+
+    fn run_default_action(&mut self) {
+        self.run_default_action_with_confirm(true);
+    }
+
+    fn run_default_action_with_confirm(&mut self, confirm_destructive: bool) {
+        let cmds = self.primary_hint_commands();
+        if cmds.is_empty() {
+            return;
+        }
+
+        let cmd = cmds[0].clone();
+        let action = if self.mode() == UiMode::Root {
+            PendingAction::Root {
+                root_ctx: self.root_ctx,
+                cmd: cmd.clone(),
+            }
+        } else {
+            PendingAction::Mode {
+                mode: self.mode(),
+                cmd: cmd.clone(),
+            }
+        };
+
+        if confirm_destructive && self.is_destructive_default_action(&cmd) {
+            self.open_confirm_modal(action);
+            return;
+        }
+
+        self.execute_action(action);
+    }
+
+    fn is_destructive_default_action(&self, cmd: &str) -> bool {
+        match (self.mode(), self.root_ctx, cmd) {
+            // Local filesystem destructive.
+            (UiMode::Snaps, _, "restore") => true,
+
+            // Remote state mutations that are hard to "undo".
+            (UiMode::Bundles, _, "promote") => true,
+            (UiMode::Bundles, _, "release") => true,
+
+            // Anything explicitly about GC/retention.
+            (UiMode::Root, RootContext::Local, "purge") => true,
+            (UiMode::Root, RootContext::Local, "retention") => true,
+
+            _ => false,
+        }
+    }
+
+    fn open_confirm_modal(&mut self, action: PendingAction) {
+        let (cmd, context) = match &action {
+            PendingAction::Root { root_ctx, cmd } => (cmd.as_str(), root_ctx.label()),
+            PendingAction::Mode { mode, cmd } => (cmd.as_str(), mode.prompt()),
+        };
+
+        let mut lines = Vec::new();
+        lines.push(format!("Run: {}", cmd));
+        lines.push(format!("Where: {}", context));
+        lines.push("".to_string());
+        lines.push("This action changes data.".to_string());
+        lines.push("Enter: confirm    Esc: cancel".to_string());
+
+        self.modal = Some(Modal {
+            title: "Confirm".to_string(),
+            lines,
+            scroll: 0,
+            kind: ModalKind::ConfirmAction { action },
+            input: Input::default(),
+        });
+    }
+
+    fn execute_action(&mut self, action: PendingAction) {
+        match action {
+            PendingAction::Root { root_ctx: _, cmd } => self.dispatch_root(cmd.as_str(), &[]),
+            PendingAction::Mode { mode, cmd } => self.dispatch_mode(mode, cmd.as_str(), &[]),
         }
     }
 
@@ -2948,7 +3074,7 @@ impl App {
 
         app.push_output(vec![
             "Type `help` for commands.".to_string(),
-            "(Use `Esc` to go back; prefix with `/` to force root commands.)".to_string(),
+            "(Use `Esc` to go back; use `/` to show available commands.)".to_string(),
         ]);
         app
     }
@@ -3192,11 +3318,11 @@ impl App {
     }
 
     fn recompute_suggestions(&mut self) {
-        let forced_root = self.input.buf.trim_start().starts_with('/');
+        let show = self.input.buf.trim_start().starts_with('/');
         let q = self.input.buf.trim_start_matches('/').trim().to_lowercase();
         if q.is_empty() {
-            if forced_root {
-                let mut defs = palette_command_defs(self.mode(), self.root_ctx);
+            if show {
+                let mut defs = self.available_command_defs();
                 defs.sort_by(|a, b| a.name.cmp(b.name));
                 self.suggestions = defs;
                 self.suggestion_selected = 0;
@@ -3215,11 +3341,7 @@ impl App {
             return;
         }
 
-        let mut defs = if forced_root {
-            palette_command_defs(self.mode(), self.root_ctx)
-        } else {
-            mode_command_defs(self.mode(), self.root_ctx)
-        };
+        let mut defs = self.available_command_defs();
         defs.sort_by(|a, b| a.name.cmp(b.name));
 
         let mut scored = Vec::new();
@@ -3242,13 +3364,14 @@ impl App {
         if self.suggestions.is_empty() {
             return;
         }
-        let forced_root = self.input.buf.trim_start().starts_with('/');
+        let show = self.input.buf.trim_start().starts_with('/');
         let sel = self
             .suggestion_selected
             .min(self.suggestions.len().saturating_sub(1));
         let cmd = self.suggestions[sel].name;
 
-        let prefix = if forced_root { "/" } else { "" };
+        // If the user opened suggestions with `/`, keep it so the list stays visible.
+        let prefix = if show { "/" } else { "" };
         let raw = self.input.buf.trim_start_matches('/');
         let trimmed = raw.trim_start();
         let mut iter = trimmed.splitn(2, char::is_whitespace);
@@ -3275,8 +3398,6 @@ impl App {
             return;
         }
 
-        let forced_root = line.trim_start().starts_with('/');
-
         self.input.push_history(&line);
         self.push_command(format!("{} {}", self.prompt(), line));
         self.input.clear();
@@ -3299,13 +3420,7 @@ impl App {
         let args = &tokens[1..];
 
         let mode = self.mode();
-        let mut defs = if forced_root {
-            palette_command_defs(mode, self.root_ctx)
-        } else if mode == UiMode::Root {
-            root_command_defs(self.root_ctx)
-        } else {
-            mode_command_defs(mode, self.root_ctx)
-        };
+        let mut defs = self.available_command_defs();
         defs.sort_by(|a, b| a.name.cmp(b.name));
 
         // Resolve aliases.
@@ -3329,7 +3444,7 @@ impl App {
             return;
         }
 
-        if forced_root || mode == UiMode::Root {
+        if mode == UiMode::Root {
             self.dispatch_root(cmd.as_str(), args);
         } else {
             self.dispatch_mode(mode, cmd.as_str(), args);
@@ -3355,7 +3470,7 @@ impl App {
                 "restore" => self.cmd_restore(args),
                 "mv" => self.cmd_mv(args),
                 "chunking" => self.cmd_chunking(args),
-                "gc" => self.cmd_gc(args),
+                "purge" => self.cmd_gc(args),
                 "retention" => self.cmd_retention(args),
 
                 "clear" => {
@@ -3608,7 +3723,7 @@ impl App {
             lines.push("- With suggestions open: Up/Down selects; Tab accepts.".to_string());
             lines.push("- History: Ctrl+p / Ctrl+n.".to_string());
             lines.push("- At root: Tab toggles local/remote.".to_string());
-            lines.push("- Prefix with `/` to force root commands.".to_string());
+            lines.push("- `/` shows available commands in this view.".to_string());
             lines.push("- Root: local shows Status; remote shows Dashboard.".to_string());
             lines.push("- Use `refresh` to recompute the current root view.".to_string());
             lines.push(
@@ -5093,6 +5208,18 @@ impl App {
             return;
         };
 
+        if args.is_empty() {
+            self.open_modal(
+                "Login",
+                vec![
+                    "Use: login --url <url> --token <token> --repo <id>".to_string(),
+                    "".to_string(),
+                    "Optional: --scope <id> --gate <id>".to_string(),
+                ],
+            );
+            return;
+        }
+
         let mut url: Option<String> = None;
         let mut token: Option<String> = None;
         let mut repo: Option<String> = None;
@@ -6455,10 +6582,6 @@ impl App {
             Some(g) => g,
             None => {
                 // Convenience: if exactly one downstream gate, use it.
-                let cfg = match self.remote_config() {
-                    Some(c) => c,
-                    None => return,
-                };
                 let graph = match client.get_gate_graph() {
                     Ok(g) => g,
                     Err(err) => {
@@ -6466,10 +6589,18 @@ impl App {
                         return;
                     }
                 };
+
+                let bundle = match client.get_bundle(&bundle_id) {
+                    Ok(b) => b,
+                    Err(err) => {
+                        self.push_error(format!("get bundle: {:#}", err));
+                        return;
+                    }
+                };
                 let mut next = graph
                     .gates
                     .iter()
-                    .filter(|g| g.upstream.iter().any(|u| u == &cfg.gate))
+                    .filter(|g| g.upstream.iter().any(|u| u == &bundle.gate))
                     .map(|g| g.id.clone())
                     .collect::<Vec<_>>();
                 next.sort();
@@ -6830,10 +6961,18 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Left => {
-            app.input.move_left();
+            if app.input.buf.is_empty() {
+                app.rotate_hint(-1);
+            } else {
+                app.input.move_left();
+            }
         }
         KeyCode::Right => {
-            app.input.move_right();
+            if app.input.buf.is_empty() {
+                app.rotate_hint(1);
+            } else {
+                app.input.move_right();
+            }
         }
         KeyCode::Backspace => {
             app.input.backspace();
@@ -6897,6 +7036,7 @@ fn handle_modal_key(app: &mut App, key: KeyEvent) {
         None,
         Close,
         SubmitSnapMessage { snap_id: String, msg: String },
+        Confirm(PendingAction),
     }
 
     let action = {
@@ -6959,6 +7099,30 @@ fn handle_modal_key(app: &mut App, key: KeyEvent) {
                 }
                 _ => ModalAction::None,
             },
+
+            ModalKind::ConfirmAction { action } => match key.code {
+                KeyCode::Esc => ModalAction::Close,
+                KeyCode::Enter => ModalAction::Confirm(action.clone()),
+                KeyCode::Up => {
+                    m.scroll = m.scroll.saturating_sub(1);
+                    ModalAction::None
+                }
+                KeyCode::Down => {
+                    if m.scroll < m.lines.len().saturating_sub(1) {
+                        m.scroll += 1;
+                    }
+                    ModalAction::None
+                }
+                KeyCode::PageUp => {
+                    m.scroll = m.scroll.saturating_sub(10);
+                    ModalAction::None
+                }
+                KeyCode::PageDown => {
+                    m.scroll = (m.scroll + 10).min(m.lines.len().saturating_sub(1));
+                    ModalAction::None
+                }
+                _ => ModalAction::None,
+            },
         }
     };
 
@@ -7005,6 +7169,12 @@ fn handle_modal_key(app: &mut App, key: KeyEvent) {
 
             app.refresh_root_view();
             app.push_output(vec!["updated snap message".to_string()]);
+        }
+
+        ModalAction::Confirm(action) => {
+            app.close_modal();
+            // Confirmed actions should not re-prompt.
+            app.execute_action(action);
         }
     }
 }
@@ -8508,7 +8678,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
 
     if let Some(hint) = input_hint_left(app) {
         // Keep hint separated from typed input.
-        input_spans.push(Span::raw("  "));
+        // If input is empty, avoid leading extra padding.
+        let sep = if buf.is_empty() { "" } else { "  " };
+        input_spans.push(Span::raw(sep));
         input_spans.push(Span::styled(
             hint,
             Style::default().fg(Color::Gray).add_modifier(Modifier::DIM),
@@ -8523,7 +8695,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
     if let Some((hint_line, hint_len)) = input_hint_right(app) {
         let inner_w = chunks[4].width.saturating_sub(2) as usize;
         let left_len = prompt.len() + 1 + buf.len();
-        let left_hint_len = input_hint_left(app).map(|h| 2 + h.len()).unwrap_or(0);
+        let left_hint_len = input_hint_left(app)
+            .map(|h| (if buf.is_empty() { 0 } else { 2 }) + h.len())
+            .unwrap_or(0);
         let right_len = hint_len;
         // Only show if it doesn't collide with left content.
         if left_len + left_hint_len + 1 + right_len <= inner_w {
@@ -8580,13 +8754,19 @@ fn draw_modal(frame: &mut ratatui::Frame, modal: &Modal) {
 
     frame.render_widget(Clear, popup);
 
+    let mut title_spans = vec![
+        Span::styled(modal.title.as_str(), Style::default().fg(Color::Yellow)),
+        Span::raw("  "),
+        Span::styled("Esc", Style::default().fg(Color::Gray)),
+    ];
+    if matches!(modal.kind, ModalKind::ConfirmAction { .. }) {
+        title_spans.push(Span::raw("  "));
+        title_spans.push(Span::styled("Enter", Style::default().fg(Color::Gray)));
+    }
+
     let outer = Block::default()
         .borders(Borders::ALL)
-        .title(Line::from(vec![
-            Span::styled(modal.title.as_str(), Style::default().fg(Color::Yellow)),
-            Span::raw("  "),
-            Span::styled("Esc", Style::default().fg(Color::Gray)),
-        ]))
+        .title(Line::from(title_spans))
         .style(Style::default().bg(Color::Black));
     let inner = outer.inner(popup);
     frame.render_widget(outer, popup);
@@ -8644,6 +8824,22 @@ fn draw_modal(frame: &mut ratatui::Frame, modal: &Modal) {
             let x = prompt.len() as u16 + modal.input.cursor as u16;
             let y = parts[1].y + 1;
             frame.set_cursor_position((parts[1].x + 1 + x, y));
+        }
+        ModalKind::ConfirmAction { .. } => {
+            let mut lines = Vec::new();
+            for s in &modal.lines {
+                lines.push(Line::from(s.as_str()));
+            }
+            if lines.is_empty() {
+                lines.push(Line::from(""));
+            }
+            let scroll = modal.scroll.min(lines.len().saturating_sub(1)) as u16;
+            frame.render_widget(
+                Paragraph::new(lines)
+                    .wrap(Wrap { trim: false })
+                    .scroll((scroll, 0)),
+                inner,
+            );
         }
     }
 }

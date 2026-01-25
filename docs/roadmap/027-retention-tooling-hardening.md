@@ -2,13 +2,13 @@
 
 ## Goal
 
-Harden retention/GC ergonomics and contracts so operators can safely prune and garbage-collect without curl and without surprising retention behavior.
+Harden retention/purge ergonomics and contracts so operators can safely prune and garbage-collect without curl and without surprising retention behavior.
 
 ## Tasks
 
 ### A) CLI regression
 
-- [x] Add an integration test for `converge remote gc --prune-releases-keep-last N`.
+- [x] Add an integration test for `converge remote purge --prune-releases-keep-last N`.
 
 ### B) API contract
 

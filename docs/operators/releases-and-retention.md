@@ -63,7 +63,7 @@ curl -X POST -H "Authorization: Bearer <token>" \
 Prefer the CLI wrapper:
 
 ```bash
-converge remote gc --dry-run=false --prune-metadata=true
+converge remote purge --dry-run=false --prune-metadata=true
 ```
 
 Prune old release history (keep only the latest N releases per channel):
@@ -76,7 +76,7 @@ curl -X POST -H "Authorization: Bearer <token>" \
 Prefer the CLI wrapper:
 
 ```bash
-converge remote gc --dry-run=false --prune-metadata=true --prune-releases-keep-last 1
+converge remote purge --dry-run=false --prune-metadata=true --prune-releases-keep-last 1
 ```
 
 This reduces retention roots: bundles referenced only by pruned releases may be deleted by the same GC run.

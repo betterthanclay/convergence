@@ -18,7 +18,7 @@ Out of scope:
 
  - [x] Add `docs/operators/releases-and-retention.md`.
  - [x] Link operator docs from existing identity bootstrap doc.
- - [x] Ensure the doc matches the current CLI/TUI commands (`release`, `releases`, `fetch --release`, `gc`).
+ - [x] Ensure the doc matches the current CLI/TUI commands (`release`, `releases`, `fetch --release`, `purge`).
  - [x] Add `docs/operators/README.md` index.
  - [x] Document release pruning via GC query params.
 
