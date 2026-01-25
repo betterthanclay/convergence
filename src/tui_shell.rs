@@ -1189,7 +1189,7 @@ impl View for ReleasesView {
             .block(
                 Block::default()
                     .borders(Borders::BOTTOM)
-                    .title("channels (commands: fetch, back)"),
+                    .title("channels (commands: fetch [--restore], back)"),
             )
             .highlight_style(Style::default().bg(Color::DarkGray));
         frame.render_stateful_widget(list, parts[0], &mut state);
@@ -2602,8 +2602,8 @@ fn releases_command_defs() -> Vec<CommandDef> {
         CommandDef {
             name: "fetch",
             aliases: &[],
-            usage: "fetch",
-            help: "Fetch selected release",
+            usage: "fetch [--restore] [--into <dir>] [--force]",
+            help: "Fetch selected release (optional restore)",
         },
     ]
 }
@@ -5470,11 +5470,6 @@ impl App {
     }
 
     fn cmd_releases_fetch_mode(&mut self, args: &[String]) {
-        if !args.is_empty() {
-            self.push_error("usage: fetch".to_string());
-            return;
-        }
-
         let Some(v) = self.current_view::<ReleasesView>() else {
             self.push_error("not in releases mode".to_string());
             return;
@@ -5485,7 +5480,10 @@ impl App {
         }
         let idx = v.selected.min(v.items.len().saturating_sub(1));
         let channel = v.items[idx].channel.clone();
-        self.cmd_fetch(&["--release".to_string(), channel]);
+
+        let mut argv = vec!["--release".to_string(), channel];
+        argv.extend(args.iter().cloned());
+        self.cmd_fetch(&argv);
     }
 
     fn cmd_sync(&mut self, args: &[String]) {

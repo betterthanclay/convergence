@@ -98,3 +98,7 @@ converge lane members default remove alice
 - If the server returns `unauthorized`, the token is missing/invalid/expired/revoked.
 - The client stores remote tokens in `.converge/state.json` and does not write them to `.converge/config.json`.
 - If a token is exposed, revoke it immediately and mint a new one.
+
+## See also
+
+- `docs/operators/releases-and-retention.md`
