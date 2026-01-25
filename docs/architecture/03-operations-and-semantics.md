@@ -27,6 +27,11 @@ Diff requirements:
 - text: structural hunks
 - binary: metadata, hashes, and (optional) specialized viewers
 
+Current implementation:
+- `converge diff` compares the working directory to the current HEAD snap.
+- `converge diff --from <snap_id> --to <snap_id>` compares two snaps.
+- Output is a path-level summary (`A`, `D`, `M`), not a hunked text diff.
+
 ## `converge publish`
 
 Creates a `publication` that submits a snap to a specific gate within a scope.
@@ -62,6 +67,20 @@ Semantics:
 - A release is typically cut from the terminal gate of the primary gate graph, but this is not required.
 - A repo can allow release creation from earlier gates (e.g. compatibility releases) if gate policy permits.
 - Release creation records provenance (who released, from which bundle, under which policy).
+
+Current implementation (dev server):
+- CLI:
+  - `converge release create --channel <name> --bundle-id <id> [--notes ...]`
+  - `converge release list`
+  - `converge release show --channel <name>`
+- API:
+  - `POST /repos/:repo_id/releases`
+  - `GET /repos/:repo_id/releases`
+  - `GET /repos/:repo_id/releases/:channel` (latest)
+- Enforcement:
+  - requires publish permission
+  - bundle must be promotable at release time
+  - defaults to terminal gate (non-admin releases require `bundle.gate == terminal_gate`)
 
 ## `converge resolve`
 

@@ -156,6 +156,33 @@ impl Workspace {
         Ok(())
     }
 
+    /// Materialize a manifest tree into a separate directory (does not create a workspace).
+    pub fn materialize_manifest_to(
+        &self,
+        root_manifest: &ObjectId,
+        out_dir: &Path,
+        force: bool,
+    ) -> Result<()> {
+        if out_dir.exists() {
+            if !force {
+                if !is_empty_dir(out_dir)? {
+                    anyhow::bail!(
+                        "destination is not empty: {} (use --force)",
+                        out_dir.display()
+                    );
+                }
+            } else {
+                clear_dir(out_dir)?;
+            }
+        } else {
+            fs::create_dir_all(out_dir)
+                .with_context(|| format!("create dir {}", out_dir.display()))?;
+        }
+
+        materialize_manifest(&self.store, root_manifest, out_dir)?;
+        Ok(())
+    }
+
     /// Compute a manifest tree for the current working directory without writing a snap.
     ///
     /// Note: this still reads file contents to compute stable blob ids.

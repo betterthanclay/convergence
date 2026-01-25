@@ -125,6 +125,24 @@ pub struct Promotion {
     pub promoted_at: String,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct Release {
+    pub id: String,
+    pub channel: String,
+    pub bundle_id: String,
+    pub scope: String,
+    pub gate: String,
+    pub released_by: String,
+
+    #[serde(default)]
+    pub released_by_user_id: Option<String>,
+
+    pub released_at: String,
+
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WhoAmI {
     pub user: String,
@@ -741,6 +759,72 @@ impl RemoteClient {
             .json()
             .context("parse bundle")?;
         Ok(bundle)
+    }
+
+    pub fn list_releases(&self) -> Result<Vec<Release>> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .get(self.url(&format!("/repos/{}/releases", repo)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("list releases")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!(
+                "remote repo not found (create it with `converge remote create-repo` or POST /repos)"
+            );
+        }
+
+        let releases: Vec<Release> = self
+            .ensure_ok(resp, "list releases")?
+            .json()
+            .context("parse releases")?;
+        Ok(releases)
+    }
+
+    pub fn get_release(&self, channel: &str) -> Result<Release> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .get(self.url(&format!("/repos/{}/releases/{}", repo, channel)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("get release")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("release not found");
+        }
+
+        let r: Release = self
+            .ensure_ok(resp, "get release")?
+            .json()
+            .context("parse release")?;
+        Ok(r)
+    }
+
+    pub fn create_release(
+        &self,
+        channel: &str,
+        bundle_id: &str,
+        notes: Option<String>,
+    ) -> Result<Release> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .post(self.url(&format!("/repos/{}/releases", repo)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .json(&serde_json::json!({
+                "channel": channel,
+                "bundle_id": bundle_id,
+                "notes": notes,
+            }))
+            .send()
+            .context("create release")?;
+
+        let resp = self.ensure_ok(resp, "create release")?;
+        let r: Release = resp.json().context("parse release")?;
+        Ok(r)
     }
 
     pub fn promote_bundle(&self, bundle_id: &str, to_gate: &str) -> Result<Promotion> {

@@ -648,7 +648,7 @@ fn input_hint_left(app: &App) -> Option<String> {
         },
         UiMode::Snaps => Some("show, restore, msg".to_string()),
         UiMode::Inbox => Some("fetch, bundle, help".to_string()),
-        UiMode::Bundles => Some("approve, promote, pin".to_string()),
+        UiMode::Bundles => Some("approve, promote, release".to_string()),
         UiMode::Lanes => Some("fetch, back".to_string()),
         UiMode::Superpositions => Some("resolve, publish, help".to_string()),
     }
@@ -1177,7 +1177,7 @@ impl View for BundlesView {
 
         let list = List::new(rows)
             .block(Block::default().borders(Borders::BOTTOM).title(format!(
-                "scope={} gate={}{} (commands: approve, promote, superpositions, back)",
+                "scope={} gate={}{} (commands: approve, promote, release, superpositions, back)",
                 self.scope,
                 self.gate,
                 self.filter
@@ -2296,6 +2296,12 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
             help: "Promote a bundle",
         },
         CommandDef {
+            name: "release",
+            aliases: &[],
+            usage: "release --channel <name> --bundle-id <id> [--notes <text>]",
+            help: "Create a release in a channel",
+        },
+        CommandDef {
             name: "superpositions",
             aliases: &["supers"],
             usage: "superpositions --bundle-id <id> [--filter <q>]",
@@ -3089,7 +3095,7 @@ impl App {
 
                 "remote" | "ping" | "fetch" | "lanes" | "members" | "member" | "lane-member"
                 | "inbox" | "bundles" | "bundle" | "pins" | "pin" | "approve" | "promote"
-                | "superpositions" | "supers" => {
+                | "release" | "superpositions" | "supers" => {
                     self.push_error("remote command; press Tab to switch to remote".to_string());
                 }
 
@@ -3120,6 +3126,7 @@ impl App {
                 "pin" => self.cmd_pin(args),
                 "approve" => self.cmd_approve(args),
                 "promote" => self.cmd_promote(args),
+                "release" => self.cmd_release(args),
                 "superpositions" => self.cmd_superpositions(args),
                 "supers" => self.cmd_superpositions(args),
 
@@ -3229,6 +3236,7 @@ impl App {
                 }
                 "approve" => self.cmd_bundles_approve_mode(args),
                 "promote" => self.cmd_bundles_promote_mode(args),
+                "release" => self.cmd_bundles_release_mode(args),
                 "superpositions" | "supers" => self.cmd_bundles_superpositions_mode(args),
                 _ => {
                     if !self.dispatch_global(cmd, args) {
@@ -3971,6 +3979,31 @@ impl App {
         let mut argv = vec!["--bundle-id".to_string(), bundle_id];
         argv.extend(args.iter().cloned());
         self.cmd_promote(&argv);
+    }
+
+    fn cmd_bundles_release_mode(&mut self, args: &[String]) {
+        if args.len() != 1 {
+            self.push_error("usage: release <channel>".to_string());
+            return;
+        }
+
+        let Some(v) = self.current_view::<BundlesView>() else {
+            self.push_error("not in bundles mode".to_string());
+            return;
+        };
+        if v.items.is_empty() {
+            self.push_error("(no selection)".to_string());
+            return;
+        }
+        let idx = v.selected.min(v.items.len().saturating_sub(1));
+        let bundle_id = v.items[idx].id.clone();
+
+        self.cmd_release(&[
+            "--channel".to_string(),
+            args[0].clone(),
+            "--bundle-id".to_string(),
+            bundle_id,
+        ]);
     }
 
     fn cmd_bundles_superpositions_mode(&mut self, args: &[String]) {
@@ -5976,6 +6009,69 @@ impl App {
         match client.promote_bundle(&bundle_id, &to_gate) {
             Ok(_) => self.push_output(vec![format!("promoted {} -> {}", bundle_id, to_gate)]),
             Err(err) => self.push_error(format!("promote: {:#}", err)),
+        }
+    }
+
+    fn cmd_release(&mut self, args: &[String]) {
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let mut channel: Option<String> = None;
+        let mut bundle_id: Option<String> = None;
+        let mut notes: Option<String> = None;
+
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--channel" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --channel".to_string());
+                        return;
+                    }
+                    channel = Some(args[i].clone());
+                }
+                "--bundle-id" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --bundle-id".to_string());
+                        return;
+                    }
+                    bundle_id = Some(args[i].clone());
+                }
+                "--notes" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --notes".to_string());
+                        return;
+                    }
+                    notes = Some(args[i].clone());
+                }
+                a => {
+                    self.push_error(format!("unknown arg: {}", a));
+                    return;
+                }
+            }
+            i += 1;
+        }
+
+        let (Some(channel), Some(bundle_id)) = (channel, bundle_id) else {
+            self.push_error(
+                "usage: release --channel <name> --bundle-id <id> [--notes <text>]".to_string(),
+            );
+            return;
+        };
+
+        match client.create_release(&channel, &bundle_id, notes) {
+            Ok(r) => {
+                self.push_output(vec![format!("released {} -> {}", r.channel, r.bundle_id)]);
+                self.refresh_root_view();
+            }
+            Err(err) => {
+                self.push_error(format!("release: {:#}", err));
+            }
         }
     }
 

@@ -59,6 +59,19 @@ enum Commands {
         force: bool,
     },
 
+    /// Compute a basic diff (workspace vs HEAD, or snap vs snap)
+    Diff {
+        /// Base snap id
+        #[arg(long)]
+        from: Option<String>,
+        /// Target snap id
+        #[arg(long)]
+        to: Option<String>,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Move/rename a file or directory within the workspace
     #[command(name = "mv")]
     Mv { from: String, to: String },
@@ -165,6 +178,14 @@ enum Commands {
         #[arg(long)]
         snap_id: Option<String>,
 
+        /// Fetch a specific bundle by id
+        #[arg(long, conflicts_with_all = ["snap_id", "lane", "user", "release"])]
+        bundle_id: Option<String>,
+
+        /// Fetch the latest release from a channel
+        #[arg(long, conflicts_with_all = ["snap_id", "lane", "user", "bundle_id"])]
+        release: Option<String>,
+
         /// Fetch unpublished lane heads (defaults to publications if omitted)
         #[arg(long)]
         lane: Option<String>,
@@ -219,6 +240,12 @@ enum Commands {
         json: bool,
     },
 
+    /// Manage releases (named channels pointing at bundles)
+    Release {
+        #[command(subcommand)]
+        command: ReleaseCommands,
+    },
+
     /// Approve a bundle (manual policy step)
     Approve {
         /// Bundle id to approve
@@ -263,6 +290,38 @@ enum Commands {
     Resolve {
         #[command(subcommand)]
         command: ResolveCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReleaseCommands {
+    /// Create a release in a channel from a bundle
+    Create {
+        #[arg(long)]
+        channel: String,
+        #[arg(long)]
+        bundle_id: String,
+        #[arg(long)]
+        notes: Option<String>,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List releases
+    List {
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show latest release in a channel
+    Show {
+        #[arg(long)]
+        channel: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -579,6 +638,54 @@ fn run() -> Result<()> {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
             ws.restore_snap(&snap_id, force)?;
             println!("Restored {}", snap_id);
+        }
+
+        Some(Commands::Diff { from, to, json }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+
+            let diffs = match (from.as_deref(), to.as_deref()) {
+                (None, None) => {
+                    let head = ws.store.get_head()?.context("no HEAD snap")?;
+                    let head_snap = ws.store.get_snap(&head)?;
+                    let from_tree =
+                        converge::diff::tree_from_store(&ws.store, &head_snap.root_manifest)?;
+
+                    let (cur_root, cur_manifests, _stats) = ws.current_manifest_tree()?;
+                    let to_tree = converge::diff::tree_from_memory(&cur_manifests, &cur_root)?;
+
+                    converge::diff::diff_trees(&from_tree, &to_tree)
+                }
+                (Some(_), None) | (None, Some(_)) => {
+                    anyhow::bail!(
+                        "use both --from and --to for snap diffs, or omit both for workspace vs HEAD"
+                    )
+                }
+                (Some(from), Some(to)) => {
+                    let from_snap = ws.store.get_snap(from)?;
+                    let to_snap = ws.store.get_snap(to)?;
+                    let from_tree =
+                        converge::diff::tree_from_store(&ws.store, &from_snap.root_manifest)?;
+                    let to_tree =
+                        converge::diff::tree_from_store(&ws.store, &to_snap.root_manifest)?;
+                    converge::diff::diff_trees(&from_tree, &to_tree)
+                }
+            };
+
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&diffs).context("serialize diff json")?
+                );
+            } else {
+                for d in &diffs {
+                    match d {
+                        converge::diff::DiffLine::Added { path, .. } => println!("A {}", path),
+                        converge::diff::DiffLine::Deleted { path, .. } => println!("D {}", path),
+                        converge::diff::DiffLine::Modified { path, .. } => println!("M {}", path),
+                    }
+                }
+                println!("{} changes", diffs.len());
+            }
         }
 
         Some(Commands::Mv { from, to }) => {
@@ -1005,6 +1112,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Fetch {
             snap_id,
+            bundle_id,
+            release,
             lane,
             user,
             restore,
@@ -1015,6 +1124,101 @@ fn run() -> Result<()> {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
             let (remote, token) = require_remote_and_token(&ws.store)?;
             let client = RemoteClient::new(remote, token)?;
+
+            if let Some(bundle_id) = bundle_id.as_deref() {
+                let bundle = client.get_bundle(bundle_id)?;
+                let root = converge::model::ObjectId(bundle.root_manifest.clone());
+                client.fetch_manifest_tree(&ws.store, &root)?;
+
+                let mut restored_to: Option<String> = None;
+                if restore {
+                    let dest = if let Some(p) = into.as_deref() {
+                        std::path::PathBuf::from(p)
+                    } else {
+                        let short = bundle_id.chars().take(8).collect::<String>();
+                        let nanos = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos();
+                        std::env::temp_dir()
+                            .join(format!("converge-grab-bundle-{}-{}", short, nanos))
+                    };
+
+                    ws.materialize_manifest_to(&root, &dest, force)
+                        .with_context(|| format!("materialize bundle to {}", dest.display()))?;
+                    restored_to = Some(dest.display().to_string());
+                    if !json {
+                        println!("Materialized bundle {} into {}", bundle_id, dest.display());
+                    }
+                }
+
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "kind": "bundle",
+                            "bundle_id": bundle.id,
+                            "root_manifest": bundle.root_manifest,
+                            "restored_to": restored_to,
+                        }))
+                        .context("serialize fetch bundle json")?
+                    );
+                } else {
+                    println!("Fetched bundle {}", bundle.id);
+                }
+                return Ok(());
+            }
+
+            if let Some(channel) = release.as_deref() {
+                let rel = client.get_release(channel)?;
+                let bundle = client.get_bundle(&rel.bundle_id)?;
+                let root = converge::model::ObjectId(bundle.root_manifest.clone());
+                client.fetch_manifest_tree(&ws.store, &root)?;
+
+                let mut restored_to: Option<String> = None;
+                if restore {
+                    let dest = if let Some(p) = into.as_deref() {
+                        std::path::PathBuf::from(p)
+                    } else {
+                        let short = rel.bundle_id.chars().take(8).collect::<String>();
+                        let nanos = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos();
+                        std::env::temp_dir()
+                            .join(format!("converge-grab-release-{}-{}", short, nanos))
+                    };
+
+                    ws.materialize_manifest_to(&root, &dest, force)
+                        .with_context(|| format!("materialize release to {}", dest.display()))?;
+                    restored_to = Some(dest.display().to_string());
+                    if !json {
+                        println!(
+                            "Materialized release {} (bundle {}) into {}",
+                            rel.channel,
+                            rel.bundle_id,
+                            dest.display()
+                        );
+                    }
+                }
+
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "kind": "release",
+                            "channel": rel.channel,
+                            "bundle_id": rel.bundle_id,
+                            "root_manifest": bundle.root_manifest,
+                            "restored_to": restored_to,
+                        }))
+                        .context("serialize fetch release json")?
+                    );
+                } else {
+                    println!("Fetched release {} ({})", rel.channel, rel.bundle_id);
+                }
+                return Ok(());
+            }
 
             let fetched = if let Some(lane) = lane.as_deref() {
                 client.fetch_lane_heads(&ws.store, lane, user.as_deref())?
@@ -1118,6 +1322,71 @@ fn run() -> Result<()> {
                 );
             } else {
                 println!("Promoted {} -> {}", promotion.from_gate, promotion.to_gate);
+            }
+        }
+
+        Some(Commands::Release { command }) => {
+            let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
+
+            match command {
+                ReleaseCommands::Create {
+                    channel,
+                    bundle_id,
+                    notes,
+                    json,
+                } => {
+                    let r = client.create_release(&channel, &bundle_id, notes)?;
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&r)
+                                .context("serialize release create json")?
+                        );
+                    } else {
+                        println!("{} {}", r.channel, r.bundle_id);
+                    }
+                }
+                ReleaseCommands::List { json } => {
+                    let mut rs = client.list_releases()?;
+                    rs.sort_by(|a, b| b.released_at.cmp(&a.released_at));
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&rs)
+                                .context("serialize release list json")?
+                        );
+                    } else {
+                        for r in rs {
+                            let short = r.bundle_id.chars().take(8).collect::<String>();
+                            println!(
+                                "{} {} {} {}",
+                                r.channel, short, r.released_at, r.released_by
+                            );
+                        }
+                    }
+                }
+                ReleaseCommands::Show { channel, json } => {
+                    let r = client.get_release(&channel)?;
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&r)
+                                .context("serialize release show json")?
+                        );
+                    } else {
+                        println!("channel: {}", r.channel);
+                        println!("bundle: {}", r.bundle_id);
+                        println!("scope: {}", r.scope);
+                        println!("gate: {}", r.gate);
+                        println!("released_at: {}", r.released_at);
+                        println!("released_by: {}", r.released_by);
+                        if let Some(n) = r.notes {
+                            println!("notes: {}", n);
+                        }
+                    }
+                }
             }
         }
         Some(Commands::Approve { bundle_id, json }) => {
