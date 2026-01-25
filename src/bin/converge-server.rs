@@ -79,8 +79,20 @@ struct AccessToken {
 struct Repo {
     id: String,
     owner: String,
+
+    #[serde(default)]
+    owner_user_id: Option<String>,
+
     readers: HashSet<String>,
+
+    #[serde(default)]
+    reader_user_ids: HashSet<String>,
+
     publishers: HashSet<String>,
+
+    #[serde(default)]
+    publisher_user_ids: HashSet<String>,
+
     lanes: HashMap<String, Lane>,
 
     gate_graph: GateGraph,
@@ -194,6 +206,9 @@ struct Lane {
     members: HashSet<String>,
 
     #[serde(default)]
+    member_user_ids: HashSet<String>,
+
+    #[serde(default)]
     heads: HashMap<String, LaneHead>,
 
     // Retention roots for unpublished collaboration. We keep a bounded history of head
@@ -213,12 +228,18 @@ struct LaneHead {
 
 const LANE_HEAD_HISTORY_KEEP_LAST: usize = 5;
 
-fn can_read(repo: &Repo, user: &str) -> bool {
-    repo.owner == user || repo.readers.contains(user)
+fn can_read(repo: &Repo, subject: &Subject) -> bool {
+    repo.owner == subject.user
+        || repo.readers.contains(&subject.user)
+        || repo.owner_user_id.as_ref().is_some_and(|u| u == &subject.user_id)
+        || repo.reader_user_ids.contains(&subject.user_id)
 }
 
-fn can_publish(repo: &Repo, user: &str) -> bool {
-    repo.owner == user || repo.publishers.contains(user)
+fn can_publish(repo: &Repo, subject: &Subject) -> bool {
+    repo.owner == subject.user
+        || repo.publishers.contains(&subject.user)
+        || repo.owner_user_id.as_ref().is_some_and(|u| u == &subject.user_id)
+        || repo.publisher_user_ids.contains(&subject.user_id)
 }
 
 #[derive(Parser)]
@@ -658,14 +679,22 @@ async fn create_repo(
 
     let mut readers = HashSet::new();
     readers.insert(subject.user.clone());
+    let mut reader_user_ids = HashSet::new();
+    reader_user_ids.insert(subject.user_id.clone());
+
     let mut publishers = HashSet::new();
     publishers.insert(subject.user.clone());
+    let mut publisher_user_ids = HashSet::new();
+    publisher_user_ids.insert(subject.user_id.clone());
 
     let mut members = HashSet::new();
     members.insert(subject.user.clone());
+    let mut member_user_ids = HashSet::new();
+    member_user_ids.insert(subject.user_id.clone());
     let default_lane = Lane {
         id: "default".to_string(),
         members,
+        member_user_ids,
         heads: HashMap::new(),
         head_history: HashMap::new(),
     };
@@ -698,8 +727,11 @@ async fn create_repo(
     let repo = Repo {
         id: payload.id.clone(),
         owner: subject.user.clone(),
+        owner_user_id: Some(subject.user_id.clone()),
         readers,
+        reader_user_ids,
         publishers,
+        publisher_user_ids,
         lanes,
 
         gate_graph,
@@ -738,7 +770,7 @@ async fn list_repos(
     let repos = state.repos.read().await;
     let mut out = Vec::new();
     for repo in repos.values() {
-        if can_read(repo, &subject.user) {
+        if can_read(repo, &subject) {
             out.push(repo.clone());
         }
     }
@@ -753,7 +785,7 @@ async fn get_repo(
 ) -> Result<Json<Repo>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
     Ok(Json(repo.clone()))
@@ -767,8 +799,8 @@ async fn get_repo_permissions(
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
     Ok(Json(serde_json::json!({
-        "read": can_read(repo, &subject.user),
-        "publish": can_publish(repo, &subject.user)
+        "read": can_read(repo, &subject),
+        "publish": can_publish(repo, &subject)
     })))
 }
 
@@ -779,7 +811,7 @@ async fn list_lanes(
 ) -> Result<Json<Vec<Lane>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -807,12 +839,12 @@ async fn update_lane_head_me(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
     let lane = repo.lanes.get_mut(&lane_id).ok_or_else(not_found)?;
-    if !lane.members.contains(&subject.user) {
+    if !lane.members.contains(&subject.user) && !lane.member_user_ids.contains(&subject.user_id) {
         return Err(forbidden());
     }
 
@@ -852,11 +884,11 @@ async fn get_lane_head(
 
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
     let lane = repo.lanes.get(&lane_id).ok_or_else(not_found)?;
-    if !lane.members.contains(&subject.user) {
+    if !lane.members.contains(&subject.user) && !lane.member_user_ids.contains(&subject.user_id) {
         return Err(forbidden());
     }
 
@@ -871,7 +903,7 @@ async fn list_gates(
 ) -> Result<Json<Vec<Gate>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -894,7 +926,7 @@ async fn get_gate_graph(
 ) -> Result<Json<GateGraph>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
     Ok(Json(repo.gate_graph.clone()))
@@ -910,7 +942,7 @@ async fn put_gate_graph(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -934,7 +966,7 @@ async fn create_scope(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -954,7 +986,7 @@ async fn list_scopes(
 ) -> Result<Json<Vec<String>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -974,7 +1006,7 @@ async fn put_blob(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_publish(repo, &subject.user) {
+        if !can_publish(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1005,7 +1037,7 @@ async fn get_blob(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_read(repo, &subject.user) {
+        if !can_read(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1040,7 +1072,7 @@ async fn put_manifest(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_publish(repo, &subject.user) {
+        if !can_publish(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1087,7 +1119,7 @@ async fn put_recipe(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_publish(repo, &subject.user) {
+        if !can_publish(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1762,7 +1794,7 @@ async fn get_manifest(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_read(repo, &subject.user) {
+        if !can_read(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1798,7 +1830,7 @@ async fn get_recipe(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_read(repo, &subject.user) {
+        if !can_read(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1836,7 +1868,7 @@ async fn put_snap(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_publish(repo, &subject.user) {
+        if !can_publish(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1882,7 +1914,7 @@ async fn get_snap(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_read(repo, &subject.user) {
+        if !can_read(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -1929,7 +1961,7 @@ async fn gc_repo(
 ) -> Result<Json<serde_json::Value>, Response> {
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2172,7 +2204,7 @@ async fn find_missing_objects(
     {
         let repos = state.repos.read().await;
         let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-        if !can_publish(repo, &subject.user) {
+        if !can_publish(repo, &subject) {
             return Err(forbidden());
         }
     }
@@ -2274,7 +2306,7 @@ async fn create_publication(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
     if !repo.scopes.contains(&payload.scope) {
@@ -2336,7 +2368,7 @@ async fn list_publications(
 ) -> Result<Json<Vec<Publication>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
     Ok(Json(repo.publications.clone()))
@@ -2376,7 +2408,7 @@ async fn create_bundle(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
     if !repo.scopes.contains(&payload.scope) {
@@ -2485,7 +2517,7 @@ async fn list_bundles(
 ) -> Result<Json<Vec<Bundle>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2515,7 +2547,7 @@ async fn get_bundle(
 
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2547,7 +2579,7 @@ async fn approve_bundle(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2615,7 +2647,7 @@ async fn list_pins(
 ) -> Result<Json<serde_json::Value>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2633,7 +2665,7 @@ async fn pin_bundle(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2661,7 +2693,7 @@ async fn unpin_bundle(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2693,7 +2725,7 @@ async fn create_promotion(
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject.user) {
+    if !can_publish(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2793,7 +2825,7 @@ async fn list_promotions(
 ) -> Result<Json<Vec<Promotion>>, Response> {
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
 
@@ -2828,7 +2860,7 @@ async fn get_promotion_state(
     validate_scope_id(&q.scope).map_err(bad_request)?;
     let repos = state.repos.read().await;
     let repo = repos.get(&repo_id).ok_or_else(not_found)?;
-    if !can_read(repo, &subject.user) {
+    if !can_read(repo, &subject) {
         return Err(forbidden());
     }
     Ok(Json(
@@ -2946,6 +2978,7 @@ fn load_repo_from_disk(
 
     // Backfill user_id fields for older on-disk records (best-effort).
     backfill_provenance_user_ids(&mut repo, handle_to_id);
+    backfill_acl_user_ids(&mut repo, handle_to_id);
 
     Ok(repo)
 }
@@ -2977,17 +3010,51 @@ fn backfill_provenance_user_ids(repo: &mut Repo, handle_to_id: &HashMap<String, 
     }
 }
 
+fn backfill_acl_user_ids(repo: &mut Repo, handle_to_id: &HashMap<String, String>) {
+    if repo.owner_user_id.is_none() {
+        repo.owner_user_id = handle_to_id.get(&repo.owner).cloned();
+    }
+    if repo.reader_user_ids.is_empty() && !repo.readers.is_empty() {
+        for h in &repo.readers {
+            if let Some(id) = handle_to_id.get(h) {
+                repo.reader_user_ids.insert(id.clone());
+            }
+        }
+    }
+    if repo.publisher_user_ids.is_empty() && !repo.publishers.is_empty() {
+        for h in &repo.publishers {
+            if let Some(id) = handle_to_id.get(h) {
+                repo.publisher_user_ids.insert(id.clone());
+            }
+        }
+    }
+
+    for lane in repo.lanes.values_mut() {
+        if lane.member_user_ids.is_empty() && !lane.members.is_empty() {
+            for h in &lane.members {
+                if let Some(id) = handle_to_id.get(h) {
+                    lane.member_user_ids.insert(id.clone());
+                }
+            }
+        }
+    }
+}
+
 fn default_repo_state(state: &AppState, repo_id: &str) -> Repo {
     let mut readers = HashSet::new();
     readers.insert(state.default_user.clone());
+    let reader_user_ids = HashSet::new();
     let mut publishers = HashSet::new();
     publishers.insert(state.default_user.clone());
+    let publisher_user_ids = HashSet::new();
 
     let mut members = HashSet::new();
     members.insert(state.default_user.clone());
+    let member_user_ids = HashSet::new();
     let default_lane = Lane {
         id: "default".to_string(),
         members,
+        member_user_ids,
         heads: HashMap::new(),
         head_history: HashMap::new(),
     };
@@ -3013,8 +3080,11 @@ fn default_repo_state(state: &AppState, repo_id: &str) -> Repo {
     Repo {
         id: repo_id.to_string(),
         owner: state.default_user.clone(),
+        owner_user_id: None,
         readers,
+        reader_user_ids,
         publishers,
+        publisher_user_ids,
         lanes,
         gate_graph,
         scopes,
