@@ -636,7 +636,7 @@ fn input_hint_left(app: &App) -> Option<String> {
                     Some("snaps, help".to_string())
                 }
             }
-            RootContext::Remote => Some("lanes, inbox, bundles".to_string()),
+            RootContext::Remote => Some("lanes, members, inbox".to_string()),
         },
         UiMode::Snaps => Some("show, restore, msg".to_string()),
         UiMode::Inbox => Some("fetch, bundle, help".to_string()),
@@ -2216,6 +2216,24 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
             help: "List lanes and lane heads",
         },
         CommandDef {
+            name: "members",
+            aliases: &[],
+            usage: "members",
+            help: "Show repo and lane membership",
+        },
+        CommandDef {
+            name: "member",
+            aliases: &[],
+            usage: "member add|remove --handle <h> [--role read|publish]",
+            help: "Manage repo membership",
+        },
+        CommandDef {
+            name: "lane-member",
+            aliases: &[],
+            usage: "lane-member add|remove --lane <id> --handle <h>",
+            help: "Manage lane membership",
+        },
+        CommandDef {
             name: "inbox",
             aliases: &[],
             usage: "inbox [--scope <id>] [--gate <id>] [--filter <q>] [--limit N]",
@@ -2904,8 +2922,9 @@ impl App {
                     self.quit = true;
                 }
 
-                "remote" | "ping" | "fetch" | "lanes" | "inbox" | "bundles" | "bundle" | "pins"
-                | "pin" | "approve" | "promote" | "superpositions" | "supers" => {
+                "remote" | "ping" | "fetch" | "lanes" | "members" | "member" | "lane-member"
+                | "inbox" | "bundles" | "bundle" | "pins" | "pin" | "approve" | "promote"
+                | "superpositions" | "supers" => {
                     self.push_error("remote command; press Tab to switch to remote".to_string());
                 }
 
@@ -2924,6 +2943,9 @@ impl App {
                 "ping" => self.cmd_ping(args),
                 "fetch" => self.cmd_fetch(args),
                 "lanes" => self.cmd_lanes(args),
+                "members" => self.cmd_members(args),
+                "member" => self.cmd_member(args),
+                "lane-member" => self.cmd_lane_member(args),
                 "inbox" => self.cmd_inbox(args),
                 "bundles" => self.cmd_bundles(args),
                 "bundle" => self.cmd_bundle(args),
@@ -4879,6 +4901,201 @@ impl App {
             selected: 0,
         });
         self.push_output(vec![format!("opened lanes ({} entries)", count)]);
+    }
+
+    fn cmd_members(&mut self, args: &[String]) {
+        let _ = args;
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let members = match client.list_repo_members() {
+            Ok(m) => m,
+            Err(err) => {
+                self.push_error(format!("members: {:#}", err));
+                return;
+            }
+        };
+
+        let lanes = client.list_lanes().ok();
+
+        let mut lines = Vec::new();
+        lines.push("Repo".to_string());
+        lines.push(format!("owner: {}", members.owner));
+
+        let publishers: std::collections::HashSet<String> =
+            members.publishers.iter().cloned().collect();
+        let mut readers = members.readers;
+        readers.sort();
+        lines.push("".to_string());
+        lines.push("members:".to_string());
+        for h in readers {
+            let role = if publishers.contains(&h) {
+                "publish"
+            } else {
+                "read"
+            };
+            lines.push(format!("- {} {}", h, role));
+        }
+
+        if let Some(mut lanes) = lanes {
+            lanes.sort_by(|a, b| a.id.cmp(&b.id));
+            lines.push("".to_string());
+            lines.push("Lanes".to_string());
+            for l in lanes {
+                let mut m = l.members.into_iter().collect::<Vec<_>>();
+                m.sort();
+                lines.push(format!("lane {} ({})", l.id, m.len()));
+                if !m.is_empty() {
+                    let preview = m.into_iter().take(10).collect::<Vec<_>>().join(", ");
+                    lines.push(format!("  {}", preview));
+                }
+            }
+        }
+
+        lines.push("".to_string());
+        lines.push("hint: use `member add/remove` and `lane-member add/remove`".to_string());
+        self.open_modal("Members", lines);
+    }
+
+    fn cmd_member(&mut self, args: &[String]) {
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+        if args.is_empty() {
+            self.push_error(
+                "usage: member add|remove --handle <h> [--role read|publish]".to_string(),
+            );
+            return;
+        }
+
+        let sub = &args[0];
+        let mut handle: Option<String> = None;
+        let mut role: String = "read".to_string();
+
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--handle" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --handle".to_string());
+                        return;
+                    }
+                    handle = Some(args[i].clone());
+                }
+                "--role" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --role".to_string());
+                        return;
+                    }
+                    role = args[i].clone();
+                }
+                a => {
+                    self.push_error(format!("unknown arg: {}", a));
+                    return;
+                }
+            }
+            i += 1;
+        }
+
+        let Some(handle) = handle else {
+            self.push_error("missing --handle".to_string());
+            return;
+        };
+
+        match sub.as_str() {
+            "add" => match client.add_repo_member(&handle, &role) {
+                Ok(()) => {
+                    self.push_output(vec![format!("added {} ({})", handle, role)]);
+                    self.refresh_root_view();
+                }
+                Err(err) => self.push_error(format!("member add: {:#}", err)),
+            },
+            "remove" | "rm" => match client.remove_repo_member(&handle) {
+                Ok(()) => {
+                    self.push_output(vec![format!("removed {}", handle)]);
+                    self.refresh_root_view();
+                }
+                Err(err) => self.push_error(format!("member remove: {:#}", err)),
+            },
+            _ => self.push_error(
+                "usage: member add|remove --handle <h> [--role read|publish]".to_string(),
+            ),
+        }
+    }
+
+    fn cmd_lane_member(&mut self, args: &[String]) {
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+        if args.is_empty() {
+            self.push_error("usage: lane-member add|remove --lane <id> --handle <h>".to_string());
+            return;
+        }
+
+        let sub = &args[0];
+        let mut lane: Option<String> = None;
+        let mut handle: Option<String> = None;
+
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--lane" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --lane".to_string());
+                        return;
+                    }
+                    lane = Some(args[i].clone());
+                }
+                "--handle" => {
+                    i += 1;
+                    if i >= args.len() {
+                        self.push_error("missing value for --handle".to_string());
+                        return;
+                    }
+                    handle = Some(args[i].clone());
+                }
+                a => {
+                    self.push_error(format!("unknown arg: {}", a));
+                    return;
+                }
+            }
+            i += 1;
+        }
+
+        let Some(lane) = lane else {
+            self.push_error("missing --lane".to_string());
+            return;
+        };
+        let Some(handle) = handle else {
+            self.push_error("missing --handle".to_string());
+            return;
+        };
+
+        match sub.as_str() {
+            "add" => match client.add_lane_member(&lane, &handle) {
+                Ok(()) => {
+                    self.push_output(vec![format!("added {} to lane {}", handle, lane)]);
+                    self.refresh_root_view();
+                }
+                Err(err) => self.push_error(format!("lane-member add: {:#}", err)),
+            },
+            "remove" | "rm" => match client.remove_lane_member(&lane, &handle) {
+                Ok(()) => {
+                    self.push_output(vec![format!("removed {} from lane {}", handle, lane)]);
+                    self.refresh_root_view();
+                }
+                Err(err) => self.push_error(format!("lane-member remove: {:#}", err)),
+            },
+            _ => self
+                .push_error("usage: lane-member add|remove --lane <id> --handle <h>".to_string()),
+        }
     }
 
     fn cmd_inbox(&mut self, args: &[String]) {

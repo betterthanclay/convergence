@@ -55,6 +55,29 @@ pub struct Repo {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct RepoMembers {
+    pub owner: String,
+    pub readers: Vec<String>,
+    pub publishers: Vec<String>,
+
+    #[serde(default)]
+    pub owner_user_id: Option<String>,
+    #[serde(default)]
+    pub reader_user_ids: Vec<String>,
+    #[serde(default)]
+    pub publisher_user_ids: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct LaneMembers {
+    pub lane: String,
+    pub members: Vec<String>,
+
+    #[serde(default)]
+    pub member_user_ids: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Publication {
     pub id: String,
     pub snap_id: String,
@@ -266,6 +289,105 @@ impl RemoteClient {
             .send()
             .context("revoke token")?;
         resp.error_for_status().context("revoke token status")?;
+        Ok(())
+    }
+
+    pub fn list_repo_members(&self) -> Result<RepoMembers> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .get(self.url(&format!("/repos/{}/members", repo)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("list repo members")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("remote repo not found");
+        }
+
+        let out: RepoMembers = resp
+            .error_for_status()
+            .context("list repo members status")?
+            .json()
+            .context("parse repo members")?;
+        Ok(out)
+    }
+
+    pub fn add_repo_member(&self, handle: &str, role: &str) -> Result<()> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .post(self.url(&format!("/repos/{}/members", repo)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .json(&serde_json::json!({"handle": handle, "role": role}))
+            .send()
+            .context("add repo member")?;
+
+        resp.error_for_status().context("add repo member status")?;
+        Ok(())
+    }
+
+    pub fn remove_repo_member(&self, handle: &str) -> Result<()> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .delete(self.url(&format!("/repos/{}/members/{}", repo, handle)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("remove repo member")?;
+        resp.error_for_status()
+            .context("remove repo member status")?;
+        Ok(())
+    }
+
+    pub fn list_lane_members(&self, lane_id: &str) -> Result<LaneMembers> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .get(self.url(&format!("/repos/{}/lanes/{}/members", repo, lane_id)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("list lane members")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("remote lane not found");
+        }
+
+        let out: LaneMembers = resp
+            .error_for_status()
+            .context("list lane members status")?
+            .json()
+            .context("parse lane members")?;
+        Ok(out)
+    }
+
+    pub fn add_lane_member(&self, lane_id: &str, handle: &str) -> Result<()> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .post(self.url(&format!("/repos/{}/lanes/{}/members", repo, lane_id)))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .json(&serde_json::json!({"handle": handle}))
+            .send()
+            .context("add lane member")?;
+
+        resp.error_for_status().context("add lane member status")?;
+        Ok(())
+    }
+
+    pub fn remove_lane_member(&self, lane_id: &str, handle: &str) -> Result<()> {
+        let repo = &self.remote.repo_id;
+        let resp = self
+            .client
+            .delete(self.url(&format!(
+                "/repos/{}/lanes/{}/members/{}",
+                repo, lane_id, handle
+            )))
+            .header(reqwest::header::AUTHORIZATION, self.auth())
+            .send()
+            .context("remove lane member")?;
+        resp.error_for_status()
+            .context("remove lane member status")?;
         Ok(())
     }
 
