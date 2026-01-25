@@ -10,7 +10,7 @@ use axum::extract::{Extension, Query, State};
 use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router, extract::Path};
 use clap::Parser;
 use tokio::sync::RwLock;
@@ -36,6 +36,10 @@ struct AppState {
     users: Arc<RwLock<HashMap<String, User>>>,
     tokens: Arc<RwLock<HashMap<String, AccessToken>>>,
     token_hash_index: Arc<RwLock<HashMap<String, String>>>,
+
+    // Optional one-time bootstrap token (hash) used to create the first admin.
+    // Enabled only when the server is started with `--bootstrap-token`.
+    bootstrap_token_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -268,6 +272,13 @@ struct Args {
     #[arg(long)]
     db_url: Option<String>,
 
+    /// One-time bootstrap bearer token that allows `POST /bootstrap` to create the first admin.
+    ///
+    /// When set and no admin exists yet, the server will start with no users/tokens and require
+    /// bootstrapping before any authenticated endpoints can be used.
+    #[arg(long)]
+    bootstrap_token: Option<String>,
+
     /// Development user name
     #[arg(long, default_value = "dev")]
     dev_user: String,
@@ -295,10 +306,20 @@ async fn run() -> Result<()> {
         load_identity_from_disk(&args.data_dir).context("load identity")?;
 
     if users.is_empty() || tokens.is_empty() {
-        let (u, t) = bootstrap_identity(&args.dev_user, &args.dev_token);
-        users.insert(u.id.clone(), u);
-        tokens.insert(t.id.clone(), t);
-        persist_identity_to_disk(&args.data_dir, &users, &tokens).context("persist identity")?;
+        if args.bootstrap_token.is_some() {
+            if !(users.is_empty() && tokens.is_empty()) {
+                anyhow::bail!(
+                    "identity store inconsistent (users/tokens missing); remove {} to re-bootstrap",
+                    args.data_dir.display()
+                );
+            }
+        } else {
+            let (u, t) = bootstrap_identity(&args.dev_user, &args.dev_token);
+            users.insert(u.id.clone(), u);
+            tokens.insert(t.id.clone(), t);
+            persist_identity_to_disk(&args.data_dir, &users, &tokens)
+                .context("persist identity")?;
+        }
     }
 
     let default_user = users
@@ -326,6 +347,8 @@ async fn run() -> Result<()> {
         users: Arc::new(RwLock::new(users)),
         tokens: Arc::new(RwLock::new(tokens)),
         token_hash_index: Arc::new(RwLock::new(token_hash_index)),
+
+        bootstrap_token_hash: args.bootstrap_token.as_deref().map(hash_token),
     });
 
     // Best-effort load repos from disk so the dev server survives restarts.
@@ -440,6 +463,7 @@ async fn run() -> Result<()> {
 
     let app = Router::new()
         .route("/healthz", get(healthz))
+        .route("/bootstrap", post(bootstrap))
         .merge(authed)
         .with_state(state);
 
@@ -544,6 +568,125 @@ fn unauthorized() -> Response {
 
 async fn healthz() -> Json<serde_json::Value> {
     Json(serde_json::json!({"status": "ok"}))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BootstrapRequest {
+    handle: String,
+
+    #[serde(default)]
+    display_name: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct BootstrapResponse {
+    user: User,
+    token: CreateTokenResponse,
+}
+
+async fn bootstrap(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<BootstrapRequest>,
+) -> Result<Json<BootstrapResponse>, Response> {
+    let Some(expected_hash) = state.bootstrap_token_hash.as_deref() else {
+        return Err(not_found());
+    };
+
+    let Some(value) = headers.get(header::AUTHORIZATION) else {
+        return Err(unauthorized());
+    };
+    let Ok(value) = value.to_str() else {
+        return Err(unauthorized());
+    };
+    let Some(token) = value.strip_prefix("Bearer ") else {
+        return Err(unauthorized());
+    };
+    if hash_token(token) != expected_hash {
+        return Err(unauthorized());
+    }
+
+    validate_user_handle(&payload.handle).map_err(bad_request)?;
+    let created_at = now_ts();
+    let user_id = generate_token_secret().map_err(internal_error)?;
+
+    let user = User {
+        id: user_id.clone(),
+        handle: payload.handle.clone(),
+        display_name: payload.display_name,
+        admin: true,
+        created_at: created_at.clone(),
+    };
+
+    // Enforce one-time semantics per data_dir: only allow bootstrapping if no admin exists.
+    {
+        let users = state.users.read().await;
+        if users.values().any(|u| u.admin) {
+            return Err(conflict("already bootstrapped"));
+        }
+    }
+
+    {
+        let mut users = state.users.write().await;
+        if users.values().any(|u| u.handle == payload.handle) {
+            return Err(conflict("user handle already exists"));
+        }
+        // Re-check under write lock.
+        if users.values().any(|u| u.admin) {
+            return Err(conflict("already bootstrapped"));
+        }
+        users.insert(user_id.clone(), user.clone());
+    }
+
+    let token_secret = generate_token_secret().map_err(internal_error)?;
+    let token_hash = hash_token(&token_secret);
+    let token_id = {
+        let mut h = blake3::Hasher::new();
+        h.update(user_id.as_bytes());
+        h.update(b"\n");
+        h.update(token_hash.as_bytes());
+        h.update(b"\n");
+        h.update(created_at.as_bytes());
+        h.finalize().to_hex().to_string()
+    };
+
+    {
+        let mut tokens = state.tokens.write().await;
+        tokens.insert(
+            token_id.clone(),
+            AccessToken {
+                id: token_id.clone(),
+                user_id: user_id.clone(),
+                token_hash: token_hash.clone(),
+                label: Some("bootstrap".to_string()),
+                created_at: created_at.clone(),
+                last_used_at: None,
+                revoked_at: None,
+                expires_at: None,
+            },
+        );
+    }
+    {
+        let mut idx = state.token_hash_index.write().await;
+        idx.insert(token_hash, token_id.clone());
+    }
+
+    {
+        let users = state.users.read().await;
+        let tokens = state.tokens.read().await;
+        if let Err(err) = persist_identity_to_disk(&state.data_dir, &users, &tokens) {
+            return Err(internal_error(err));
+        }
+    }
+
+    Ok(Json(BootstrapResponse {
+        user,
+        token: CreateTokenResponse {
+            id: token_id,
+            token: token_secret,
+            created_at,
+        },
+    }))
 }
 
 async fn whoami(Extension(subject): Extension<Subject>) -> Json<serde_json::Value> {

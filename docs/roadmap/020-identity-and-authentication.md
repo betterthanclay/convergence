@@ -99,7 +99,7 @@ Later:
 
 ### C) Server: bootstrap and admin
 
-- [ ] Add a bootstrap mode for first admin creation (one of):
+- [x] Add a bootstrap mode for first admin creation (one of):
   - CLI flag `--bootstrap-token` that allows `POST /bootstrap` once
   - or generate an on-disk one-time token on first run
 - [x] Add admin-only endpoints:
@@ -133,7 +133,7 @@ Later:
   - invalid token rejected
   - revoked token rejected
   - token resolves correct user
-- [ ] Provenance attribution test:
+- [x] Provenance attribution test:
   - two different users publish/sync and server stores distinct identities
 
 ### H) Docs
