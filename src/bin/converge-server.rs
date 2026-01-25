@@ -231,14 +231,20 @@ const LANE_HEAD_HISTORY_KEEP_LAST: usize = 5;
 fn can_read(repo: &Repo, subject: &Subject) -> bool {
     repo.owner == subject.user
         || repo.readers.contains(&subject.user)
-        || repo.owner_user_id.as_ref().is_some_and(|u| u == &subject.user_id)
+        || repo
+            .owner_user_id
+            .as_ref()
+            .is_some_and(|u| u == &subject.user_id)
         || repo.reader_user_ids.contains(&subject.user_id)
 }
 
 fn can_publish(repo: &Repo, subject: &Subject) -> bool {
     repo.owner == subject.user
         || repo.publishers.contains(&subject.user)
-        || repo.owner_user_id.as_ref().is_some_and(|u| u == &subject.user_id)
+        || repo
+            .owner_user_id
+            .as_ref()
+            .is_some_and(|u| u == &subject.user_id)
         || repo.publisher_user_ids.contains(&subject.user_id)
 }
 
@@ -307,8 +313,10 @@ async fn run() -> Result<()> {
         .map(|u| (u.handle.clone(), u.id.clone()))
         .collect();
 
-    let token_hash_index: HashMap<String, String> =
-        tokens.values().map(|t| (t.token_hash.clone(), t.id.clone())).collect();
+    let token_hash_index: HashMap<String, String> = tokens
+        .values()
+        .map(|t| (t.token_hash.clone(), t.id.clone()))
+        .collect();
 
     let state = Arc::new(AppState {
         default_user,
@@ -473,15 +481,12 @@ async fn require_bearer(
         if t.revoked_at.is_some() {
             return unauthorized();
         }
-        if let Some(exp) = &t.expires_at {
-            if let Ok(exp) = time::OffsetDateTime::parse(
-                exp,
-                &time::format_description::well_known::Rfc3339,
-            ) {
-                if time::OffsetDateTime::now_utc() > exp {
-                    return unauthorized();
-                }
-            }
+        if let Some(exp) = &t.expires_at
+            && let Ok(exp) =
+                time::OffsetDateTime::parse(exp, &time::format_description::well_known::Rfc3339)
+            && time::OffsetDateTime::now_utc() > exp
+        {
+            return unauthorized();
         }
 
         let users = state.users.read().await;
@@ -657,7 +662,9 @@ async fn revoke_token(
         }
     }
 
-    Ok(Json(serde_json::json!({"revoked": true, "token_id": token_id, "revoked_at": revoked_at})))
+    Ok(Json(
+        serde_json::json!({"revoked": true, "token_id": token_id, "revoked_at": revoked_at}),
+    ))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1316,6 +1323,7 @@ fn collect_objects_from_manifest_tree(
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn visit_manifest(
         state: &AppState,
         repo_id: &str,
@@ -3328,8 +3336,7 @@ fn bootstrap_identity(handle: &str, token_secret: &str) -> (User, AccessToken) {
 fn generate_token_secret() -> Result<String> {
     // 32 bytes of entropy, hex-encoded.
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes)
-        .map_err(|e| anyhow::anyhow!("getrandom: {:?}", e))?;
+    getrandom::getrandom(&mut bytes).map_err(|e| anyhow::anyhow!("getrandom: {:?}", e))?;
     let mut out = String::with_capacity(64);
     for b in &bytes {
         out.push_str(&format!("{:02x}", b));

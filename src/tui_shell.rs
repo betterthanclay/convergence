@@ -512,41 +512,25 @@ impl View for RootView {
                 let m = format!("M:{}", self.change_summary.modified);
                 let d = format!("D:{}", self.change_summary.deleted);
                 let r = format!("R:{}", self.change_summary.renamed);
-                let base_len = title.len()
-                    + 2
-                    + a.len()
-                    + 2
-                    + m.len()
-                    + 2
-                    + d.len()
-                    + 2
-                    + r.len();
+                let base_len = title.len() + 2 + a.len() + 2 + m.len() + 2 + d.len() + 2 + r.len();
                 let include_baseline = !baseline.is_empty()
                     && (area.width as usize) >= (base_len + baseline_prefix.len() + baseline.len());
 
                 let header = Line::from(vec![
                     Span::styled(title.to_string(), Style::default().fg(Color::Yellow)),
                     Span::raw("  "),
-                    Span::styled(
-                        a,
-                        Style::default().fg(Color::Green),
-                    ),
+                    Span::styled(a, Style::default().fg(Color::Green)),
                     Span::raw(" "),
-                    Span::styled(
-                        m,
-                        Style::default().fg(Color::Yellow),
-                    ),
+                    Span::styled(m, Style::default().fg(Color::Yellow)),
                     Span::raw(" "),
-                    Span::styled(
-                        d,
-                        Style::default().fg(Color::Red),
-                    ),
+                    Span::styled(d, Style::default().fg(Color::Red)),
                     Span::raw(" "),
-                    Span::styled(
-                        r,
-                        Style::default().fg(Color::Cyan),
-                    ),
-                    Span::raw(if include_baseline { baseline_prefix } else { "" }),
+                    Span::styled(r, Style::default().fg(Color::Cyan)),
+                    Span::raw(if include_baseline {
+                        baseline_prefix
+                    } else {
+                        ""
+                    }),
                     Span::styled(
                         if include_baseline {
                             baseline.to_string()
@@ -565,7 +549,10 @@ impl View for RootView {
                         Style::default().fg(root_ctx_color(RootContext::Remote)),
                     ),
                     Span::raw("  "),
-                    Span::styled(fmt_ts_ui(self.updated_at()), Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        fmt_ts_ui(self.updated_at()),
+                        Style::default().fg(Color::Gray),
+                    ),
                 ]);
                 render_view_chrome_with_header(frame, header, area)
             }
@@ -580,15 +567,7 @@ impl View for RootView {
                 let m = format!("M:{}", self.change_summary.modified);
                 let d = format!("D:{}", self.change_summary.deleted);
                 let r = format!("R:{}", self.change_summary.renamed);
-                let base_len = title.len()
-                    + 2
-                    + a.len()
-                    + 2
-                    + m.len()
-                    + 2
-                    + d.len()
-                    + 2
-                    + r.len();
+                let base_len = title.len() + 2 + a.len() + 2 + m.len() + 2 + d.len() + 2 + r.len();
                 let include_baseline = (area.width as usize) >= (base_len + 2 + baseline.len());
                 if include_baseline {
                     include_baseline_line = false;
@@ -985,9 +964,11 @@ impl View for LanesView {
         }
 
         let list = List::new(rows)
-            .block(Block::default().borders(Borders::BOTTOM).title(
-                "(commands: fetch, back)".to_string(),
-            ))
+            .block(
+                Block::default()
+                    .borders(Borders::BOTTOM)
+                    .title("(commands: fetch, back)".to_string()),
+            )
             .highlight_style(Style::default().bg(Color::DarkGray));
         frame.render_stateful_widget(list, parts[0], &mut state);
 
@@ -1001,7 +982,10 @@ impl View for LanesView {
             out.push(Line::from(format!("user: {}", it.user)));
             if let Some(h) = &it.head {
                 out.push(Line::from(format!("snap: {}", h.snap_id)));
-                out.push(Line::from(format!("updated_at: {}", fmt_ts_ui(&h.updated_at))));
+                out.push(Line::from(format!(
+                    "updated_at: {}",
+                    fmt_ts_ui(&h.updated_at)
+                )));
                 if let Some(cid) = &h.client_id {
                     out.push(Line::from(format!("client_id: {}", cid)));
                 }
@@ -1661,7 +1645,11 @@ enum StatusChange {
     Added(String),
     Modified(String),
     Deleted(String),
-    Renamed { from: String, to: String, modified: bool },
+    Renamed {
+        from: String,
+        to: String,
+        modified: bool,
+    },
 }
 
 impl StatusChange {
@@ -1692,9 +1680,7 @@ fn blob_prefix_suffix_score(a: &[u8], b: &[u8]) -> (usize, usize, usize, f64) {
     }
 
     let mut suffix = 0usize;
-    while suffix < (min - prefix)
-        && a[a.len() - 1 - suffix] == b[b.len() - 1 - suffix]
-    {
+    while suffix < (min - prefix) && a[a.len() - 1 - suffix] == b[b.len() - 1 - suffix] {
         suffix += 1;
     }
 
@@ -2051,9 +2037,7 @@ fn diff_trees_with_renames(
             }
 
             // Quick size filter.
-            let a = from_bytes.len() as i64;
-            let b = to_bytes.len() as i64;
-            let diff = (a - b).abs() as usize;
+            let diff = from_bytes.len().abs_diff(to_bytes.len());
             let max = from_bytes.len().max(to_bytes.len());
             if diff > 8192 && (diff as f64) / (max as f64) > 0.20 {
                 continue;
@@ -2116,7 +2100,8 @@ fn diff_trees_with_renames(
     let mut used_added_recipe_paths: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     for (from_path, from_recipe) in remaining_deleted_recipes {
-        let Some(from_recipe_obj) = load_recipe(store, None, "", &from_recipe, chunk_size_bytes) else {
+        let Some(from_recipe_obj) = load_recipe(store, None, "", &from_recipe, chunk_size_bytes)
+        else {
             continue;
         };
         if from_recipe_obj.chunks.len() > MAX_CHUNKS {
@@ -2137,9 +2122,10 @@ fn diff_trees_with_renames(
                 continue;
             }
 
-            let a = from_recipe_obj.chunks.len() as i64;
-            let b = to_recipe_obj.chunks.len() as i64;
-            let diff = (a - b).abs() as usize;
+            let diff = from_recipe_obj
+                .chunks
+                .len()
+                .abs_diff(to_recipe_obj.chunks.len());
             let max = from_recipe_obj.chunks.len().max(to_recipe_obj.chunks.len());
             if diff > 4 && (diff as f64) / (max as f64) > 0.20 {
                 continue;
@@ -2661,7 +2647,12 @@ impl App {
         self.lane_last_synced = ws
             .as_ref()
             .and_then(|w| w.store.read_state().ok())
-            .map(|st| st.lane_sync.into_iter().map(|(k, v)| (k, v.snap_id)).collect())
+            .map(|st| {
+                st.lane_sync
+                    .into_iter()
+                    .map(|(k, v)| (k, v.snap_id))
+                    .collect()
+            })
             .unwrap_or_default();
 
         self.latest_snap_id = ws
@@ -2913,8 +2904,8 @@ impl App {
                     self.quit = true;
                 }
 
-                "remote" | "ping" | "fetch" | "lanes" | "inbox" | "bundles" | "bundle"
-                | "pins" | "pin" | "approve" | "promote" | "superpositions" | "supers" => {
+                "remote" | "ping" | "fetch" | "lanes" | "inbox" | "bundles" | "bundle" | "pins"
+                | "pin" | "approve" | "promote" | "superpositions" | "supers" => {
                     self.push_error("remote command; press Tab to switch to remote".to_string());
                 }
 
@@ -3122,7 +3113,10 @@ impl App {
             lines.push("- Prefix with `/` to force root commands.".to_string());
             lines.push("- Root: local shows Status; remote shows Dashboard.".to_string());
             lines.push("- Use `refresh` to recompute the current root view.".to_string());
-            lines.push("- `status` opens detailed status (and in local-root acts like refresh).".to_string());
+            lines.push(
+                "- `status` opens detailed status (and in local-root acts like refresh)."
+                    .to_string(),
+            );
             lines.push("- UI: `timefmt` toggles relative/absolute timestamps.".to_string());
             self.open_modal("Help", lines);
             return;
@@ -6087,10 +6081,7 @@ fn myers_edit_distance_lines(a: &[String], b: &[String]) -> usize {
 
             let mut x2 = x;
             let mut y2 = x2 - k;
-            while (x2 as usize) < n
-                && (y2 as usize) < m
-                && a[x2 as usize] == b[y2 as usize]
-            {
+            while (x2 as usize) < n && (y2 as usize) < m && a[x2 as usize] == b[y2 as usize] {
                 x2 += 1;
                 y2 += 1;
             }
@@ -6273,8 +6264,7 @@ fn local_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
                 } else {
                     let base = base_ids.as_ref().and_then(|m| m.get(from));
                     let cur = cur_ids.get(to);
-                    if let (Some(IdentityKey::Blob(bid)), Some(IdentityKey::Blob(_))) =
-                        (base, cur)
+                    if let (Some(IdentityKey::Blob(bid)), Some(IdentityKey::Blob(_))) = (base, cur)
                     {
                         let old_bytes = ws.store.get_blob(&ObjectId(bid.clone())).ok();
                         let new_bytes = std::fs::read(ws.root.join(std::path::Path::new(to))).ok();
@@ -6416,17 +6406,18 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
     fn local_summary(ws: &Workspace, ctx: &RenderCtx) -> Result<(Vec<String>, LocalSummary)> {
         let snaps = ws.list_snaps()?;
         let mut out = Vec::new();
-        let mut sum = LocalSummary::default();
-        sum.snaps = snaps.len();
-
         let head = ws.store.get_head().ok().flatten();
-        sum.head = head.clone();
+        let mut sum = LocalSummary {
+            snaps: snaps.len(),
+            head: head.clone(),
+            ..Default::default()
+        };
 
         let mut baseline: Option<crate::model::SnapRecord> = None;
-        if let Some(h) = head {
-            if let Ok(s) = ws.show_snap(&h) {
-                baseline = Some(s);
-            }
+        if let Some(h) = head.clone()
+            && let Ok(s) = ws.show_snap(&h)
+        {
+            baseline = Some(s);
         }
         if baseline.is_none() {
             baseline = snaps.first().cloned();
@@ -6565,7 +6556,10 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         sum.inbox_total = pubs.len();
         sum.inbox_resolved = pubs.iter().filter(|p| p.resolution.is_some()).count();
         sum.inbox_pending = sum.inbox_total.saturating_sub(sum.inbox_resolved);
-        sum.inbox_missing_local = pubs.iter().filter(|p| !ws.store.has_snap(&p.snap_id)).count();
+        sum.inbox_missing_local = pubs
+            .iter()
+            .filter(|p| !ws.store.has_snap(&p.snap_id))
+            .count();
 
         out.push(format!(
             "inbox: {} total ({} pending, {} resolved)",
@@ -6860,6 +6854,7 @@ fn collect_leaves_base(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod rename_tests {
     use super::*;
     use crate::model::ManifestEntry;
@@ -6989,32 +6984,92 @@ mod rename_tests {
             version: 1,
             size: 40,
             chunks: vec![
-                FileRecipeChunk { blob: c1.clone(), size: 4 },
-                FileRecipeChunk { blob: c2.clone(), size: 4 },
-                FileRecipeChunk { blob: c3.clone(), size: 4 },
-                FileRecipeChunk { blob: c4.clone(), size: 4 },
-                FileRecipeChunk { blob: c5.clone(), size: 4 },
-                FileRecipeChunk { blob: c6.clone(), size: 4 },
-                FileRecipeChunk { blob: c7.clone(), size: 4 },
-                FileRecipeChunk { blob: c8.clone(), size: 4 },
-                FileRecipeChunk { blob: c9.clone(), size: 4 },
-                FileRecipeChunk { blob: ca.clone(), size: 4 },
+                FileRecipeChunk {
+                    blob: c1.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c2.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c3.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c4.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c5.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c6.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c7.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c8.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c9.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: ca.clone(),
+                    size: 4,
+                },
             ],
         };
         let r_new = FileRecipe {
             version: 1,
             size: 40,
             chunks: vec![
-                FileRecipeChunk { blob: c1.clone(), size: 4 },
-                FileRecipeChunk { blob: c2.clone(), size: 4 },
-                FileRecipeChunk { blob: c3.clone(), size: 4 },
-                FileRecipeChunk { blob: c4.clone(), size: 4 },
-                FileRecipeChunk { blob: cb.clone(), size: 4 },
-                FileRecipeChunk { blob: c6.clone(), size: 4 },
-                FileRecipeChunk { blob: c7.clone(), size: 4 },
-                FileRecipeChunk { blob: c8.clone(), size: 4 },
-                FileRecipeChunk { blob: c9.clone(), size: 4 },
-                FileRecipeChunk { blob: ca.clone(), size: 4 },
+                FileRecipeChunk {
+                    blob: c1.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c2.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c3.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c4.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: cb.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c6.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c7.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c8.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: c9.clone(),
+                    size: 4,
+                },
+                FileRecipeChunk {
+                    blob: ca.clone(),
+                    size: 4,
+                },
             ],
         };
 
@@ -7216,8 +7271,7 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
                 height: 1,
             };
             frame.render_widget(
-                Paragraph::new(hint_line)
-                .alignment(ratatui::layout::Alignment::Right),
+                Paragraph::new(hint_line).alignment(ratatui::layout::Alignment::Right),
                 rect,
             );
         }

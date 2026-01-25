@@ -59,11 +59,12 @@ fn tokens_can_be_created_listed_and_revoked() -> Result<()> {
         .context("list tokens status")?
         .json()
         .context("parse list tokens")?;
-    assert!(list
-        .as_array()
-        .context("tokens list not array")?
-        .iter()
-        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some(token_id.as_str())));
+    assert!(
+        list.as_array()
+            .context("tokens list not array")?
+            .iter()
+            .any(|t| t.get("id").and_then(|v| v.as_str()) == Some(token_id.as_str()))
+    );
 
     // Revoke token.
     client

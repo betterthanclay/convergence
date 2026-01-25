@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 use crate::model::{
     FileRecipe, LaneSyncRecord, Manifest, ObjectId, Resolution, SnapRecord, WorkspaceConfig,
@@ -476,11 +476,7 @@ impl LocalStore {
         let s =
             fs::read_to_string(&path).with_context(|| format!("read head {}", path.display()))?;
         let s = s.trim().to_string();
-        if s.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(s))
-        }
+        if s.is_empty() { Ok(None) } else { Ok(Some(s)) }
     }
 
     pub fn set_head(&self, snap_id: Option<&str>) -> Result<()> {

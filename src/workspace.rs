@@ -242,8 +242,9 @@ impl Workspace {
             fs::rename(&tmp_abs, &to_abs)
                 .with_context(|| format!("rename tmp -> {}", to_abs.display()))?;
         } else {
-            fs::rename(&from_abs, &to_abs)
-                .with_context(|| format!("rename {} -> {}", from_abs.display(), to_abs.display()))?;
+            fs::rename(&from_abs, &to_abs).with_context(|| {
+                format!("rename {} -> {}", from_abs.display(), to_abs.display())
+            })?;
         }
 
         Ok(())
@@ -760,7 +761,8 @@ fn is_empty_except_converge_and_git(root: &Path) -> Result<bool> {
 }
 
 fn is_empty_dir(root: &Path) -> Result<bool> {
-    for entry in fs::read_dir(root).with_context(|| format!("read dir {}", root.display()))? {
+    let mut it = fs::read_dir(root).with_context(|| format!("read dir {}", root.display()))?;
+    if let Some(entry) = it.next() {
         let _ = entry?;
         return Ok(false);
     }

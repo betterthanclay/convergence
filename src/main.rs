@@ -61,10 +61,7 @@ enum Commands {
 
     /// Move/rename a file or directory within the workspace
     #[command(name = "mv")]
-    Mv {
-        from: String,
-        to: String,
-    },
+    Mv { from: String, to: String },
 
     /// Configure or show the remote
     Remote {
@@ -568,7 +565,11 @@ fn run() -> Result<()> {
                     } else {
                         for t in list {
                             let label = t.label.unwrap_or_default();
-                            let revoked = if t.revoked_at.is_some() { " revoked" } else { "" };
+                            let revoked = if t.revoked_at.is_some() {
+                                " revoked"
+                            } else {
+                                ""
+                            };
                             println!("{} {}{}", t.id, label, revoked);
                         }
                     }
