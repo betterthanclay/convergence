@@ -59,6 +59,7 @@ enum UiMode {
     Snaps,
     Inbox,
     Bundles,
+    Releases,
     Lanes,
     Superpositions,
 }
@@ -92,6 +93,7 @@ impl UiMode {
             UiMode::Snaps => "snaps>",
             UiMode::Inbox => "inbox>",
             UiMode::Bundles => "bundles>",
+            UiMode::Releases => "releases>",
             UiMode::Lanes => "lanes>",
             UiMode::Superpositions => "supers>",
         }
@@ -649,6 +651,7 @@ fn input_hint_left(app: &App) -> Option<String> {
         UiMode::Snaps => Some("show, restore, msg".to_string()),
         UiMode::Inbox => Some("fetch, bundle, help".to_string()),
         UiMode::Bundles => Some("approve, promote, release".to_string()),
+        UiMode::Releases => Some("fetch, back".to_string()),
         UiMode::Lanes => Some("fetch, back".to_string()),
         UiMode::Superpositions => Some("resolve, publish, help".to_string()),
     }
@@ -1113,6 +1116,107 @@ struct BundlesView {
     filter: Option<String>,
     items: Vec<crate::remote::Bundle>,
     selected: usize,
+}
+
+#[derive(Debug)]
+struct ReleasesView {
+    updated_at: String,
+    items: Vec<crate::remote::Release>,
+    selected: usize,
+}
+
+impl View for ReleasesView {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn mode(&self) -> UiMode {
+        UiMode::Releases
+    }
+
+    fn title(&self) -> &str {
+        "Releases"
+    }
+
+    fn updated_at(&self) -> &str {
+        &self.updated_at
+    }
+
+    fn move_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn move_down(&mut self) {
+        if self.items.is_empty() {
+            self.selected = 0;
+            return;
+        }
+        let max = self.items.len().saturating_sub(1);
+        self.selected = (self.selected + 1).min(max);
+    }
+
+    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect, ctx: &RenderCtx) {
+        let inner = render_view_chrome(frame, self.title(), self.updated_at(), area);
+        let parts = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+            .split(inner);
+
+        let mut state = ListState::default();
+        if !self.items.is_empty() {
+            state.select(Some(self.selected.min(self.items.len().saturating_sub(1))));
+        }
+
+        let mut rows = Vec::new();
+        for r in &self.items {
+            let short = r.bundle_id.chars().take(8).collect::<String>();
+            rows.push(ListItem::new(format!(
+                "{} {} {}",
+                r.channel,
+                short,
+                fmt_ts_list(&r.released_at, ctx)
+            )));
+        }
+        if rows.is_empty() {
+            rows.push(ListItem::new("(empty)"));
+        }
+
+        let list = List::new(rows)
+            .block(
+                Block::default()
+                    .borders(Borders::BOTTOM)
+                    .title("channels (commands: fetch, back)"),
+            )
+            .highlight_style(Style::default().bg(Color::DarkGray));
+        frame.render_stateful_widget(list, parts[0], &mut state);
+
+        let details = if self.items.is_empty() {
+            vec![Line::from("(no selection)")]
+        } else {
+            let idx = self.selected.min(self.items.len().saturating_sub(1));
+            let r = &self.items[idx];
+            let mut out = Vec::new();
+            out.push(Line::from(format!("channel: {}", r.channel)));
+            out.push(Line::from(format!("bundle: {}", r.bundle_id)));
+            out.push(Line::from(format!("scope: {}", r.scope)));
+            out.push(Line::from(format!("gate: {}", r.gate)));
+            out.push(Line::from(format!(
+                "released_at: {}",
+                fmt_ts_ui(&r.released_at)
+            )));
+            out.push(Line::from(format!("released_by: {}", r.released_by)));
+            if let Some(n) = &r.notes {
+                out.push(Line::from(""));
+                out.push(Line::from(format!("notes: {}", n)));
+            }
+            out
+        };
+        frame.render_widget(Paragraph::new(details).wrap(Wrap { trim: false }), parts[1]);
+    }
 }
 
 impl View for BundlesView {
@@ -2236,6 +2340,12 @@ fn remote_root_command_defs() -> Vec<CommandDef> {
             help: "List lanes and lane heads",
         },
         CommandDef {
+            name: "releases",
+            aliases: &[],
+            usage: "releases",
+            help: "Open releases browser",
+        },
+        CommandDef {
             name: "members",
             aliases: &[],
             usage: "members",
@@ -2481,6 +2591,23 @@ fn lanes_command_defs() -> Vec<CommandDef> {
     ]
 }
 
+fn releases_command_defs() -> Vec<CommandDef> {
+    vec![
+        CommandDef {
+            name: "back",
+            aliases: &[],
+            usage: "back",
+            help: "Return to root",
+        },
+        CommandDef {
+            name: "fetch",
+            aliases: &[],
+            usage: "fetch",
+            help: "Fetch selected release",
+        },
+    ]
+}
+
 fn mode_command_defs(mode: UiMode, root_ctx: RootContext) -> Vec<CommandDef> {
     match mode {
         UiMode::Root => root_command_defs(root_ctx),
@@ -2496,6 +2623,11 @@ fn mode_command_defs(mode: UiMode, root_ctx: RootContext) -> Vec<CommandDef> {
         }
         UiMode::Bundles => {
             let mut out = bundles_command_defs();
+            out.extend(global_command_defs());
+            out
+        }
+        UiMode::Releases => {
+            let mut out = releases_command_defs();
             out.extend(global_command_defs());
             out
         }
@@ -3116,6 +3248,7 @@ impl App {
                 "ping" => self.cmd_ping(args),
                 "fetch" => self.cmd_fetch(args),
                 "lanes" => self.cmd_lanes(args),
+                "releases" => self.cmd_releases(args),
                 "members" => self.cmd_members(args),
                 "member" => self.cmd_member(args),
                 "lane-member" => self.cmd_lane_member(args),
@@ -3238,6 +3371,21 @@ impl App {
                 "promote" => self.cmd_bundles_promote_mode(args),
                 "release" => self.cmd_bundles_release_mode(args),
                 "superpositions" | "supers" => self.cmd_bundles_superpositions_mode(args),
+                _ => {
+                    if !self.dispatch_global(cmd, args) {
+                        self.push_error(format!(
+                            "unknown command in {:?} mode: {} (try /help)",
+                            mode, cmd
+                        ));
+                    }
+                }
+            },
+            UiMode::Releases => match cmd {
+                "back" => {
+                    self.pop_mode();
+                    self.push_output(vec!["back".to_string()]);
+                }
+                "fetch" => self.cmd_releases_fetch_mode(args),
                 _ => {
                     if !self.dispatch_global(cmd, args) {
                         self.push_error(format!(
@@ -5298,6 +5446,25 @@ impl App {
         ]);
     }
 
+    fn cmd_releases_fetch_mode(&mut self, args: &[String]) {
+        if !args.is_empty() {
+            self.push_error("usage: fetch".to_string());
+            return;
+        }
+
+        let Some(v) = self.current_view::<ReleasesView>() else {
+            self.push_error("not in releases mode".to_string());
+            return;
+        };
+        if v.items.is_empty() {
+            self.push_error("(no selection)".to_string());
+            return;
+        }
+        let idx = v.selected.min(v.items.len().saturating_sub(1));
+        let channel = v.items[idx].channel.clone();
+        self.cmd_fetch(&["--release".to_string(), channel]);
+    }
+
     fn cmd_sync(&mut self, args: &[String]) {
         let Some(ws) = self.require_workspace() else {
             return;
@@ -5454,6 +5621,48 @@ impl App {
             selected: 0,
         });
         self.push_output(vec![format!("opened lanes ({} entries)", count)]);
+    }
+
+    fn cmd_releases(&mut self, _args: &[String]) {
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let releases = match client.list_releases() {
+            Ok(r) => r,
+            Err(err) => {
+                self.push_error(format!("releases: {:#}", err));
+                return;
+            }
+        };
+
+        // Reduce to latest per channel.
+        let mut latest: std::collections::HashMap<String, crate::remote::Release> =
+            std::collections::HashMap::new();
+        for r in releases {
+            match latest.get(&r.channel) {
+                None => {
+                    latest.insert(r.channel.clone(), r);
+                }
+                Some(prev) => {
+                    if r.released_at > prev.released_at {
+                        latest.insert(r.channel.clone(), r);
+                    }
+                }
+            }
+        }
+
+        let mut items = latest.into_values().collect::<Vec<_>>();
+        items.sort_by(|a, b| a.channel.cmp(&b.channel));
+
+        let count = items.len();
+        self.push_view(ReleasesView {
+            updated_at: now_ts(),
+            items,
+            selected: 0,
+        });
+        self.push_output(vec![format!("opened releases ({} channels)", count)]);
     }
 
     fn cmd_members(&mut self, args: &[String]) {
