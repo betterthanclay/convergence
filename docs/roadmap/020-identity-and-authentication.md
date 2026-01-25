@@ -115,8 +115,8 @@ Later:
 
 ### E) Client: credential storage + UX
 
-- [ ] Stop storing remote token plaintext in `.converge/config.json`.
-- [ ] Introduce `.converge/state.json` (or OS keychain) to store secrets.
+- [x] Stop storing remote token plaintext in `.converge/config.json`.
+- [x] Introduce `.converge/state.json` (or OS keychain) to store secrets.
 - [ ] Add CLI commands:
   - `converge login --url ... --token ... --repo ... [--scope ... --gate ...]`
   - `converge logout`

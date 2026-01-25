@@ -142,7 +142,10 @@ fn phase6_e2e_resolve_superpositions_produces_promotable_bundle() -> Result<()> 
     let store = LocalStore::open(ws1.path())?;
     let cfg = store.read_config()?;
     let remote = cfg.remote.context("missing remote config")?;
-    let rc = RemoteClient::new(remote)?;
+    let token = store
+        .get_remote_token(&remote)?
+        .context("missing remote token")?;
+    let rc = RemoteClient::new(remote, token)?;
 
     let root = ObjectId(bundle.root_manifest.clone());
     rc.fetch_manifest_tree(&store, &root)?;

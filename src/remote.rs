@@ -211,6 +211,7 @@ pub struct GateDef {
 
 pub struct RemoteClient {
     remote: RemoteConfig,
+    token: String,
     client: reqwest::blocking::Client,
 }
 
@@ -234,12 +235,16 @@ fn with_retries<T>(label: &str, mut f: impl FnMut() -> Result<T>) -> Result<T> {
 }
 
 impl RemoteClient {
-    pub fn new(remote: RemoteConfig) -> Result<Self> {
+    pub fn new(remote: RemoteConfig, token: String) -> Result<Self> {
         let client = reqwest::blocking::Client::builder()
             .user_agent("converge")
             .build()
             .context("build reqwest client")?;
-        Ok(Self { remote, client })
+        Ok(Self {
+            remote,
+            token,
+            client,
+        })
     }
 
     pub fn remote(&self) -> &RemoteConfig {
@@ -537,7 +542,7 @@ impl RemoteClient {
     }
 
     fn auth(&self) -> String {
-        format!("Bearer {}", self.remote.token)
+        format!("Bearer {}", self.token)
     }
 
     fn url(&self, path: &str) -> String {

@@ -60,6 +60,7 @@ impl LocalStore {
         let state = WorkspaceState {
             version: 1,
             lane_sync: std::collections::HashMap::new(),
+            remote_tokens: std::collections::HashMap::new(),
         };
         let state_bytes = serde_json::to_vec_pretty(&state).context("serialize workspace state")?;
         write_atomic(&root.join("state.json"), &state_bytes).context("write state.json")?;
@@ -69,7 +70,20 @@ impl LocalStore {
 
     pub fn read_config(&self) -> Result<WorkspaceConfig> {
         let bytes = fs::read(self.root.join("config.json")).context("read config.json")?;
-        let cfg: WorkspaceConfig = serde_json::from_slice(&bytes).context("parse config.json")?;
+        let mut cfg: WorkspaceConfig =
+            serde_json::from_slice(&bytes).context("parse config.json")?;
+
+        // Migration: if an older config contains a token, move it into state.json.
+        if let Some(remote) = cfg.remote.as_mut()
+            && let Some(token) = remote.token.take()
+        {
+            self.set_remote_token(remote, &token)
+                .context("migrate remote token to state")?;
+            // Persist updated config without token.
+            self.write_config(&cfg)
+                .context("write config after token migration")?;
+        }
+
         Ok(cfg)
     }
 
@@ -85,6 +99,7 @@ impl LocalStore {
             return Ok(WorkspaceState {
                 version: 1,
                 lane_sync: std::collections::HashMap::new(),
+                remote_tokens: std::collections::HashMap::new(),
             });
         }
         let bytes = fs::read(&path).context("read state.json")?;
@@ -110,6 +125,40 @@ impl LocalStore {
                 synced_at: synced_at.to_string(),
             },
         );
+        self.write_state(&st)
+    }
+
+    pub fn remote_token_key(&self, remote: &crate::model::RemoteConfig) -> String {
+        format!("{}#{}", remote.base_url, remote.repo_id)
+    }
+
+    pub fn get_remote_token(&self, remote: &crate::model::RemoteConfig) -> Result<Option<String>> {
+        let st = self.read_state()?;
+        if st.version != 1 {
+            anyhow::bail!("unsupported workspace state version {}", st.version);
+        }
+        Ok(st
+            .remote_tokens
+            .get(&self.remote_token_key(remote))
+            .cloned())
+    }
+
+    pub fn set_remote_token(&self, remote: &crate::model::RemoteConfig, token: &str) -> Result<()> {
+        let mut st = self.read_state()?;
+        if st.version != 1 {
+            anyhow::bail!("unsupported workspace state version {}", st.version);
+        }
+        st.remote_tokens
+            .insert(self.remote_token_key(remote), token.to_string());
+        self.write_state(&st)
+    }
+
+    pub fn clear_remote_token(&self, remote: &crate::model::RemoteConfig) -> Result<()> {
+        let mut st = self.read_state()?;
+        if st.version != 1 {
+            anyhow::bail!("unsupported workspace state version {}", st.version);
+        }
+        st.remote_tokens.remove(&self.remote_token_key(remote));
         self.write_state(&st)
     }
 

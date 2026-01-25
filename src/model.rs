@@ -53,7 +53,12 @@ pub struct RetentionConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RemoteConfig {
     pub base_url: String,
-    pub token: String,
+
+    // Token is stored in workspace state, not config.json.
+    // Kept as an optional field for backwards-compatible parsing of older config files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+
     pub repo_id: String,
     pub scope: String,
     pub gate: String,
@@ -65,6 +70,9 @@ pub struct WorkspaceState {
 
     #[serde(default)]
     pub lane_sync: std::collections::HashMap<String, LaneSyncRecord>,
+
+    #[serde(default)]
+    pub remote_tokens: std::collections::HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

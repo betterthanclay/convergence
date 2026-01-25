@@ -144,7 +144,19 @@ impl App {
         };
         app.remote = Some(remote.clone());
 
-        let client = match RemoteClient::new(remote.clone()) {
+        let token = match ws.store.get_remote_token(&remote) {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                app.error = Some("no remote token configured".to_string());
+                return app;
+            }
+            Err(err) => {
+                app.error = Some(format!("read remote token: {:#}", err));
+                return app;
+            }
+        };
+
+        let client = match RemoteClient::new(remote.clone(), token) {
             Ok(c) => c,
             Err(err) => {
                 app.error = Some(format!("init remote client: {:#}", err));
@@ -173,7 +185,11 @@ impl App {
 
     fn remote_client(&self) -> Result<RemoteClient> {
         let remote = self.remote.clone().context("no remote configured")?;
-        RemoteClient::new(remote)
+        let store = self.store.clone().context("no workspace store")?;
+        let token = store
+            .get_remote_token(&remote)?
+            .context("no remote token configured")?;
+        RemoteClient::new(remote, token)
     }
 
     fn refresh_inbox(&mut self) {

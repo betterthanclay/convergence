@@ -3176,8 +3176,35 @@ impl App {
     }
 
     fn remote_client(&mut self) -> Option<RemoteClient> {
-        let cfg = self.remote_config()?;
-        match RemoteClient::new(cfg) {
+        let ws = self.require_workspace()?;
+
+        let cfg = match ws.store.read_config() {
+            Ok(c) => c,
+            Err(err) => {
+                self.push_error(format!("read config: {:#}", err));
+                return None;
+            }
+        };
+        let Some(remote) = cfg.remote else {
+            self.push_error("no remote configured".to_string());
+            return None;
+        };
+
+        let token = match ws.store.get_remote_token(&remote) {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                self.push_error(
+                    "no remote token configured (run `remote set --token ...`)".to_string(),
+                );
+                return None;
+            }
+            Err(err) => {
+                self.push_error(format!("read remote token: {:#}", err));
+                return None;
+            }
+        };
+
+        match RemoteClient::new(remote, token) {
             Ok(c) => Some(c),
             Err(err) => {
                 self.push_error(format!("init remote client: {:#}", err));
@@ -3932,7 +3959,22 @@ impl App {
                     return;
                 }
             };
-            let client = match RemoteClient::new(remote.clone()) {
+
+            let token = match ws.store.get_remote_token(&remote) {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    self.push_error(
+                        "no remote token configured (run `remote set --token ...`)".to_string(),
+                    );
+                    return;
+                }
+                Err(err) => {
+                    self.push_error(format!("read remote token: {:#}", err));
+                    return;
+                }
+            };
+
+            let client = match RemoteClient::new(remote.clone(), token) {
                 Ok(c) => c,
                 Err(err) => {
                     self.push_error(format!("init remote client: {:#}", err));
@@ -4492,11 +4534,17 @@ impl App {
 
         cfg.remote = Some(RemoteConfig {
             base_url,
-            token,
+            token: None,
             repo_id,
             scope,
             gate,
         });
+
+        let remote = cfg.remote.clone().expect("remote config just set above");
+        if let Err(err) = ws.store.set_remote_token(&remote, &token) {
+            self.push_error(format!("store remote token: {:#}", err));
+            return;
+        }
 
         if let Err(err) = ws.store.write_config(&cfg) {
             self.push_error(format!("write config: {:#}", err));
@@ -4520,6 +4568,13 @@ impl App {
                 return;
             }
         };
+
+        if let Some(remote) = cfg.remote.take()
+            && let Err(err) = ws.store.clear_remote_token(&remote)
+        {
+            self.push_error(format!("clear remote token: {:#}", err));
+            return;
+        }
 
         cfg.remote = None;
         if let Err(err) = ws.store.write_config(&cfg) {
@@ -4627,7 +4682,21 @@ impl App {
             }
         };
 
-        let client = match RemoteClient::new(cfg.clone()) {
+        let token = match ws.store.get_remote_token(&cfg) {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                self.push_error(
+                    "no remote token configured (run `remote set --token ...`)".to_string(),
+                );
+                return;
+            }
+            Err(err) => {
+                self.push_error(format!("read remote token: {:#}", err));
+                return;
+            }
+        };
+
+        let client = match RemoteClient::new(cfg.clone(), token) {
             Ok(c) => c,
             Err(err) => {
                 self.push_error(format!("init remote client: {:#}", err));
@@ -4833,7 +4902,21 @@ impl App {
             }
         };
 
-        let client = match RemoteClient::new(cfg.clone()) {
+        let token = match ws.store.get_remote_token(&cfg) {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                self.push_error(
+                    "no remote token configured (run `remote set --token ...`)".to_string(),
+                );
+                return;
+            }
+            Err(err) => {
+                self.push_error(format!("read remote token: {:#}", err));
+                return;
+            }
+        };
+
+        let client = match RemoteClient::new(cfg.clone(), token) {
             Ok(c) => c,
             Err(err) => {
                 self.push_error(format!("init remote client: {:#}", err));
@@ -6530,6 +6613,14 @@ fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
     lines.push(format!("scope: {}", remote.scope));
     lines.push(format!("gate: {}", remote.gate));
 
+    let token = ws.store.get_remote_token(&remote)?;
+    if token.is_some() {
+        lines.push("token: (configured)".to_string());
+    } else {
+        lines.push("token: (missing; run `remote set --token ...`)".to_string());
+        return Ok(lines);
+    }
+
     // healthz
     let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
     let start = std::time::Instant::now();
@@ -6543,7 +6634,7 @@ fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
         }
     }
 
-    let client = RemoteClient::new(remote.clone())?;
+    let client = RemoteClient::new(remote.clone(), token.expect("checked is_some above"))?;
     let promotion_state = client.promotion_state(&remote.scope)?;
     lines.push("".to_string());
     lines.push("promotion_state:".to_string());
@@ -6739,6 +6830,14 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
         out.push(format!("scope: {}", remote.scope));
         out.push(format!("gate: {}", remote.gate));
 
+        let token = ws.store.get_remote_token(&remote)?;
+        if token.is_some() {
+            out.push("token: (configured)".to_string());
+        } else {
+            out.push("token: (missing; run `remote set --token ...`)".to_string());
+            return Ok((out, sum));
+        }
+
         // healthz
         let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
         let start = std::time::Instant::now();
@@ -6754,7 +6853,7 @@ fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx, primary: RootContext) -> Res
             }
         }
 
-        let client = RemoteClient::new(remote.clone())?;
+        let client = RemoteClient::new(remote.clone(), token.expect("checked is_some above"))?;
 
         // Gate graph stats.
         if let Ok(graph) = client.get_gate_graph() {

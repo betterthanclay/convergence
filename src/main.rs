@@ -597,20 +597,24 @@ fn run() -> Result<()> {
                     gate,
                 } => {
                     let mut cfg = ws.store.read_config()?;
-                    cfg.remote = Some(RemoteConfig {
+                    let remote = RemoteConfig {
                         base_url: url,
-                        token,
+                        token: None,
                         repo_id: repo,
                         scope,
                         gate,
-                    });
+                    };
+                    ws.store
+                        .set_remote_token(&remote, &token)
+                        .context("store remote token in state.json")?;
+                    cfg.remote = Some(remote);
                     ws.store.write_config(&cfg)?;
                     println!("Remote configured");
                 }
                 RemoteCommands::CreateRepo { repo, json } => {
-                    let remote = require_remote(&ws.store)?;
+                    let (remote, token) = require_remote_and_token(&ws.store)?;
                     let repo_id = repo.unwrap_or_else(|| remote.repo_id.clone());
-                    let client = RemoteClient::new(remote)?;
+                    let client = RemoteClient::new(remote, token)?;
                     let created = client.create_repo(&repo_id)?;
                     if json {
                         println!(
@@ -627,8 +631,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Whoami { json }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             let who = client.whoami()?;
             if json {
                 println!(
@@ -644,8 +648,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Token { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
 
             match command {
                 TokenCommands::Create { label, user, json } => {
@@ -706,8 +710,8 @@ fn run() -> Result<()> {
 
         Some(Commands::User { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
 
             match command {
                 UserCommands::List { json } => {
@@ -754,8 +758,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote.clone())?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote.clone(), token)?;
 
             let snap = match snap_id {
                 Some(id) => ws.show_snap(&id)?,
@@ -791,8 +795,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote.clone())?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote.clone(), token)?;
 
             let snap = match snap_id {
                 Some(id) => ws.show_snap(&id)?,
@@ -821,8 +825,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Lanes { json }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             let mut lanes = client.list_lanes()?;
             lanes.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -850,8 +854,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Members { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
 
             match command {
                 MembersCommands::List { json } => {
@@ -901,8 +905,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Lane { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
 
             match command {
                 LaneCommands::Members { lane_id, command } => match command {
@@ -959,8 +963,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
 
             let fetched = if let Some(lane) = lane.as_deref() {
                 client.fetch_lane_heads(&ws.store, lane, user.as_deref())?
@@ -1015,8 +1019,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote.clone())?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote.clone(), token)?;
             let scope = scope.unwrap_or_else(|| remote.scope.clone());
             let gate = gate.unwrap_or_else(|| remote.gate.clone());
 
@@ -1054,8 +1058,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             let promotion = client.promote_bundle(&bundle_id, &to_gate)?;
             if json {
                 println!(
@@ -1068,8 +1072,8 @@ fn run() -> Result<()> {
         }
         Some(Commands::Approve { bundle_id, json }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             let bundle = client.approve_bundle(&bundle_id)?;
             if json {
                 println!(
@@ -1087,8 +1091,8 @@ fn run() -> Result<()> {
         }
         Some(Commands::Pins { json }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             let pins = client.list_pins()?;
             if json {
                 println!(
@@ -1107,8 +1111,8 @@ fn run() -> Result<()> {
             json,
         }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote)?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote, token)?;
             if unpin {
                 client.unpin_bundle(&bundle_id)?;
             } else {
@@ -1144,7 +1148,11 @@ fn run() -> Result<()> {
                 return Ok(());
             };
 
-            let client = RemoteClient::new(remote.clone())?;
+            let token = ws
+                .store
+                .get_remote_token(&remote)?
+                .context("no remote token configured (run `converge remote set --url ... --token ... --repo ...`)")?;
+            let client = RemoteClient::new(remote.clone(), token)?;
             let mut pubs = client.list_publications()?;
             pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
             pubs.truncate(limit);
@@ -1216,8 +1224,8 @@ fn run() -> Result<()> {
 
         Some(Commands::Resolve { command }) => {
             let ws = Workspace::discover(&std::env::current_dir().context("get current dir")?)?;
-            let remote = require_remote(&ws.store)?;
-            let client = RemoteClient::new(remote.clone())?;
+            let (remote, token) = require_remote_and_token(&ws.store)?;
+            let client = RemoteClient::new(remote.clone(), token)?;
 
             match command {
                 ResolveCommands::Init {
@@ -1573,4 +1581,12 @@ fn require_remote(store: &LocalStore) -> Result<RemoteConfig> {
     cfg.remote.context(
         "no remote configured (run `converge remote set --url ... --token ... --repo ...`)",
     )
+}
+
+fn require_remote_and_token(store: &LocalStore) -> Result<(RemoteConfig, String)> {
+    let remote = require_remote(store)?;
+    let token = store.get_remote_token(&remote)?.context(
+        "no remote token configured (run `converge remote set --url ... --token ... --repo ...`)",
+    )?;
+    Ok((remote, token))
 }
