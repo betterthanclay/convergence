@@ -106,7 +106,7 @@
 			"specialNotes": "Temp dirs/files for tests and scratch restores. Focus on security/cleanup patterns."
 		}
 	],
-	"model": "minimax-m2.1-free",
+	"model": "big-pickle",
 	"provider": "opencode",
 	"providerTimeoutMs": 300000
 }
