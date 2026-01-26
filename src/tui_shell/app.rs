@@ -663,7 +663,7 @@ impl App {
                     }
                 }
             },
-            UiMode::Snaps => Vec::new(),
+            UiMode::Snaps => vec!["restore".to_string(), "msg".to_string()],
             UiMode::Inbox => vec!["bundle".to_string(), "fetch".to_string()],
             UiMode::Releases => vec!["fetch".to_string(), "back".to_string()],
             UiMode::Lanes => vec!["fetch".to_string(), "back".to_string()],
