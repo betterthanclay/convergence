@@ -172,7 +172,7 @@ pub(super) enum ModalKind {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum PendingAction {
     Root { root_ctx: RootContext, cmd: String },
     Mode { mode: UiMode, cmd: String },
@@ -477,6 +477,8 @@ pub(super) struct App {
 
     modal: Option<Modal>,
 
+    confirmed_action: Option<PendingAction>,
+
     pub(super) login_wizard: Option<LoginWizard>,
     pub(super) fetch_wizard: Option<FetchWizard>,
     pub(super) publish_wizard: Option<PublishWizard>,
@@ -518,6 +520,7 @@ impl Default for App {
             last_command: None,
             last_result: None,
             modal: None,
+            confirmed_action: None,
 
             login_wizard: None,
             fetch_wizard: None,
@@ -639,7 +642,7 @@ impl App {
                             + v.change_summary.renamed;
                     }
                     if changes > 0 {
-                        return vec!["save".to_string(), "history".to_string()];
+                        return vec!["snap".to_string(), "history".to_string()];
                     }
 
                     if self.remote_configured {
@@ -663,7 +666,16 @@ impl App {
                     }
                 }
             },
-            UiMode::Snaps => vec!["restore".to_string(), "msg".to_string()],
+            UiMode::Snaps => {
+                let Some(v) = self.current_view::<SnapsView>() else {
+                    return Vec::new();
+                };
+                if v.selected_is_pending() {
+                    vec!["snap".to_string(), "revert".to_string()]
+                } else {
+                    vec!["restore".to_string(), "msg".to_string()]
+                }
+            }
             UiMode::Inbox => vec!["bundle".to_string(), "fetch".to_string()],
             UiMode::Releases => vec!["fetch".to_string(), "back".to_string()],
             UiMode::Lanes => vec!["fetch".to_string(), "back".to_string()],
@@ -765,6 +777,7 @@ impl App {
         match (self.mode(), self.root_ctx, cmd) {
             // Local filesystem destructive.
             (UiMode::Snaps, _, "restore") => true,
+            (UiMode::Snaps, _, "revert") => true,
 
             // Remote state mutations that are hard to "undo".
             (UiMode::Bundles, _, "promote") => true,
@@ -831,6 +844,16 @@ impl App {
             PendingAction::Root { root_ctx: _, cmd } => self.dispatch_root(cmd.as_str(), &[]),
             PendingAction::Mode { mode, cmd } => self.dispatch_mode(mode, cmd.as_str(), &[]),
         }
+    }
+
+    pub(in crate::tui_shell) fn execute_action_confirmed(&mut self, action: PendingAction) {
+        self.confirmed_action = Some(action.clone());
+        self.execute_action(action);
+        self.confirmed_action = None;
+    }
+
+    fn action_is_confirmed(&self, action: &PendingAction) -> bool {
+        self.confirmed_action.as_ref() == Some(action)
     }
 
     fn refresh_remote_identity(&mut self, ws: &Workspace, now: OffsetDateTime) {
@@ -1349,7 +1372,7 @@ impl App {
                     self.push_output(vec!["refreshed".to_string()]);
                 }
                 "init" => self.cmd_init(args),
-                "save" => self.cmd_snap(args),
+                "snap" => self.cmd_snap(args),
                 "publish" => self.cmd_publish(args),
                 "sync" => self.cmd_sync(args),
                 "history" => self.cmd_snaps(args),
@@ -1414,7 +1437,7 @@ impl App {
                     self.quit = true;
                 }
 
-                "init" | "save" | "publish" | "history" | "show" | "restore" | "mv" => {
+                "init" | "snap" | "publish" | "history" | "show" | "restore" | "mv" => {
                     self.push_error("local command; press Tab to switch to local".to_string());
                 }
 
@@ -1466,7 +1489,9 @@ impl App {
                 }
                 "filter" => self.cmd_snaps_filter(args),
                 "clear-filter" => self.cmd_snaps_clear_filter(args),
+                "snap" => self.cmd_snaps_snap(args),
                 "msg" => self.cmd_snaps_msg(args),
+                "revert" => self.cmd_snaps_revert(args),
                 "restore" => self.cmd_snaps_restore(args),
                 _ => {
                     if !self.dispatch_global(cmd, args) {
@@ -1790,7 +1815,7 @@ impl App {
             return;
         };
 
-        // Flagless UX: `save [message...]`.
+        // Flagless UX: `snap [message...]`.
         if !args.is_empty() && !args[0].starts_with('-') {
             let msg = args.join(" ").trim().to_string();
             let msg = if msg.is_empty() { None } else { Some(msg) };
@@ -1815,7 +1840,7 @@ impl App {
             }
             Some(args[1..].join(" "))
         } else {
-            self.push_error("usage: save [message...]".to_string());
+            self.push_error("usage: snap [message...]".to_string());
             return;
         };
 
@@ -1838,12 +1863,12 @@ impl App {
             self.push_error("not in snaps mode".to_string());
             return;
         };
-        if v.items.is_empty() {
-            self.push_error("(no selection)".to_string());
-            return;
-        }
 
-        let idx = v.selected.min(v.items.len().saturating_sub(1));
+        let Some(idx) = v.selected_snap_index() else {
+            self.push_error("(no snap selected)".to_string());
+            return;
+        };
+
         let snap_id = v.items[idx].id.clone();
 
         if args.is_empty() {
@@ -1951,12 +1976,18 @@ impl App {
                     .map(|lines| extract_change_summary(lines).0)
                     .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
 
+                let selected_row = if pending_changes.is_some() && !items.is_empty() {
+                    1
+                } else {
+                    0
+                };
+
                 self.push_view(SnapsView {
                     updated_at: now_ts(),
                     filter: None,
                     all_items: items.clone(),
                     items,
-                    selected: 0,
+                    selected_row,
 
                     head_id,
 
@@ -1978,8 +2009,9 @@ impl App {
                 filter,
                 all_items,
                 items,
-                selected,
+                selected_row,
                 updated_at,
+                pending_changes,
                 ..
             }) => {
                 if q.is_empty() {
@@ -2001,7 +2033,11 @@ impl App {
 
                     *filter = Some(q);
                     *items = next;
-                    *selected = 0;
+                    *selected_row = if pending_changes.is_some() && !items.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
                     *updated_at = now_ts();
                     Ok(format!("filtered to {} snaps", items.len()))
                 }
@@ -2026,13 +2062,18 @@ impl App {
                 filter,
                 all_items,
                 items,
-                selected,
+                selected_row,
                 updated_at,
+                pending_changes,
                 ..
             }) => {
                 *filter = None;
                 *items = all_items.clone();
-                *selected = 0;
+                *selected_row = if pending_changes.is_some() && !items.is_empty() {
+                    1
+                } else {
+                    0
+                };
                 *updated_at = now_ts();
                 Ok(format!("cleared filter ({} snaps)", items.len()))
             }
@@ -2042,6 +2083,126 @@ impl App {
         match out {
             Ok(line) => self.push_output(vec![line]),
             Err(err) => self.push_error(err),
+        }
+    }
+
+    fn cmd_snaps_snap(&mut self, args: &[String]) {
+        let Some(v) = self.current_view::<SnapsView>() else {
+            self.push_error("not in snaps mode".to_string());
+            return;
+        };
+        if !v.selected_is_pending() {
+            self.push_error("select the pending changes row to snap".to_string());
+            return;
+        }
+        if v.pending_changes.is_none() {
+            self.push_error("(no pending changes)".to_string());
+            return;
+        }
+
+        self.cmd_snap(args);
+
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+        let ts_mode = self.ts_mode;
+        if let Some(v) = self.current_view_mut::<SnapsView>() {
+            match ws.list_snaps() {
+                Ok(snaps) => {
+                    v.all_items = snaps.clone();
+                    v.items = snaps;
+                    v.head_id = ws.store.get_head().ok().flatten();
+
+                    let rctx = RenderCtx {
+                        now: OffsetDateTime::now_utc(),
+                        ts_mode,
+                    };
+                    v.pending_changes = local_status_lines(&ws, &rctx)
+                        .ok()
+                        .map(|lines| extract_change_summary(lines).0)
+                        .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
+
+                    v.selected_row = if v.pending_changes.is_some() && !v.items.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    v.updated_at = now_ts();
+                }
+                Err(err) => self.push_error(format!("list snaps: {:#}", err)),
+            }
+        }
+    }
+
+    fn cmd_snaps_revert(&mut self, args: &[String]) {
+        let mut force = false;
+        for a in args {
+            if a == "--force" || a == "force" {
+                force = true;
+                continue;
+            }
+            self.push_error("usage: revert [force]".to_string());
+            return;
+        }
+
+        let Some(v) = self.current_view::<SnapsView>() else {
+            self.push_error("not in snaps mode".to_string());
+            return;
+        };
+        if !v.selected_is_pending() {
+            self.push_error("select the pending changes row to revert".to_string());
+            return;
+        }
+        if v.pending_changes.is_none() {
+            self.push_error("(no pending changes)".to_string());
+            return;
+        }
+
+        let action = PendingAction::Mode {
+            mode: UiMode::Snaps,
+            cmd: "revert".to_string(),
+        };
+        if !force && !self.action_is_confirmed(&action) {
+            self.open_confirm_modal(action);
+            return;
+        }
+
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+        let Some(head_id) = ws.store.get_head().ok().flatten() else {
+            self.push_error("no active snap (head) to revert to".to_string());
+            return;
+        };
+
+        match ws.restore_snap(&head_id, true) {
+            Ok(()) => {
+                self.push_output(vec![format!("reverted to {}", head_id)]);
+
+                let ts_mode = self.ts_mode;
+                if let Some(v) = self.current_view_mut::<SnapsView>() {
+                    v.head_id = Some(head_id.clone());
+
+                    let rctx = RenderCtx {
+                        now: OffsetDateTime::now_utc(),
+                        ts_mode,
+                    };
+                    v.pending_changes = local_status_lines(&ws, &rctx)
+                        .ok()
+                        .map(|lines| extract_change_summary(lines).0)
+                        .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
+
+                    v.selected_row = if v.pending_changes.is_some() && !v.items.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    v.updated_at = now_ts();
+                }
+
+                self.refresh_root_view();
+            }
+            Err(err) => self.push_error(format!("revert: {:#}", err)),
         }
     }
 
@@ -2066,13 +2227,10 @@ impl App {
         }
 
         if snap_id.is_none()
-            && let Some(SnapsView {
-                items, selected, ..
-            }) = self.current_view::<SnapsView>()
-            && !items.is_empty()
+            && let Some(v) = self.current_view::<SnapsView>()
+            && let Some(idx) = v.selected_snap_index()
         {
-            let idx = (*selected).min(items.len().saturating_sub(1));
-            snap_id = Some(items[idx].id.clone());
+            snap_id = Some(v.items[idx].id.clone());
         }
 
         let Some(snap_id) = snap_id else {

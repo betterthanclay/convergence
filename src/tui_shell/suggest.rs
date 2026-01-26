@@ -60,7 +60,7 @@ mod tests {
         };
 
         let mut scored = vec![(100, help), (44, history)];
-        sort_scored_suggestions(&mut scored, &["save".to_string(), "history".to_string()]);
+        sort_scored_suggestions(&mut scored, &["snap".to_string(), "history".to_string()]);
         assert_eq!(scored[0].1.name, "history");
     }
 

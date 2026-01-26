@@ -367,8 +367,8 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
             // Refresh snaps view list (if visible) and root status.
             if let Some(v) = app.current_view_mut::<super::views::SnapsView>() {
                 let selected_id = v
-                    .items
-                    .get(v.selected.min(v.items.len().saturating_sub(1)))
+                    .selected_snap_index()
+                    .and_then(|i| v.items.get(i))
                     .map(|s| s.id.clone());
 
                 match ws.list_snaps() {
@@ -378,7 +378,12 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                         if let Some(sel) = selected_id
                             && let Some(i) = v.items.iter().position(|s| s.id == sel)
                         {
-                            v.selected = i;
+                            let row_offset = if v.pending_changes.is_some_and(|s| s.total() > 0) {
+                                1
+                            } else {
+                                0
+                            };
+                            v.selected_row = i + row_offset;
                         }
                         v.updated_at = super::app::now_ts();
                     }
@@ -395,7 +400,7 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
         ModalAction::Confirm(action) => {
             app.close_modal();
             // Confirmed actions should not re-prompt.
-            app.execute_action(action);
+            app.execute_action_confirmed(action);
         }
 
         ModalAction::SubmitTextInput { action, value } => {

@@ -63,10 +63,10 @@ pub(super) fn local_root_command_defs() -> Vec<CommandDef> {
             help: "Initialize a workspace (.converge)",
         },
         CommandDef {
-            name: "save",
-            aliases: &[],
-            usage: "save [message...]",
-            help: "Save a snapshot",
+            name: "snap",
+            aliases: &["save"],
+            usage: "snap [message...]",
+            help: "Create a snapshot",
         },
         CommandDef {
             name: "publish",
@@ -270,10 +270,22 @@ pub(super) fn snaps_command_defs() -> Vec<CommandDef> {
             help: "Clear snap filter",
         },
         CommandDef {
+            name: "snap",
+            aliases: &[],
+            usage: "snap [message...]",
+            help: "Create a snap from pending changes",
+        },
+        CommandDef {
             name: "msg",
             aliases: &[],
             usage: "msg [message...] | msg clear",
             help: "Set/clear message on selected snap",
+        },
+        CommandDef {
+            name: "revert",
+            aliases: &[],
+            usage: "revert",
+            help: "Revert pending changes back to head (confirm)",
         },
         CommandDef {
             name: "restore",
