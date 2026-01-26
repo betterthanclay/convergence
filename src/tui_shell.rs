@@ -14,8 +14,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::block::BorderType;
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::model::{
     ChunkingConfig, Manifest, ManifestEntryKind, ObjectId, RemoteConfig, Resolution,
@@ -47,6 +46,8 @@ use view::{RenderCtx, View, render_view_chrome, render_view_chrome_with_header};
 
 mod views;
 use views::SnapsView;
+
+mod modal;
 
 pub fn run() -> Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -11063,7 +11064,7 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
     // Cursor
     if let Some(m) = &app.modal {
         dim_frame(frame);
-        draw_modal(frame, m);
+        modal::draw_modal(frame, m);
         return;
     }
 
@@ -11084,195 +11085,9 @@ fn dim_frame(frame: &mut ratatui::Frame) {
     }
 }
 
-fn draw_modal(frame: &mut ratatui::Frame, modal: &Modal) {
-    let area = frame.area();
-    let popup = centered_rect(80, 80, area);
+// draw_modal moved to src/tui_shell/modal.rs
 
-    let framed = expand_rect(popup, 1, 1, area);
-    frame.render_widget(Clear, framed);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Double)
-            .style(Style::default().bg(Color::Black)),
-        framed,
-    );
-
-    frame.render_widget(Clear, popup);
-
-    let mut title_spans = vec![
-        Span::styled(modal.title.as_str(), Style::default().fg(Color::Yellow)),
-        Span::raw("  "),
-        Span::styled("Esc", Style::default().fg(Color::Gray)),
-    ];
-    if matches!(
-        &modal.kind,
-        ModalKind::ConfirmAction { .. }
-            | ModalKind::SnapMessage { .. }
-            | ModalKind::TextInput { .. }
-    ) {
-        title_spans.push(Span::raw("  "));
-        title_spans.push(Span::styled("Enter", Style::default().fg(Color::Gray)));
-    }
-
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .title(Line::from(title_spans))
-        .style(Style::default().bg(Color::Black));
-    let inner = outer.inner(popup);
-    frame.render_widget(outer, popup);
-
-    match &modal.kind {
-        ModalKind::Viewer => {
-            let mut lines = Vec::new();
-            for s in &modal.lines {
-                lines.push(Line::from(s.as_str()));
-            }
-            if lines.is_empty() {
-                lines.push(Line::from(""));
-            }
-            let scroll = modal.scroll.min(lines.len().saturating_sub(1)) as u16;
-            frame.render_widget(
-                Paragraph::new(lines)
-                    .wrap(Wrap { trim: false })
-                    .scroll((scroll, 0)),
-                inner,
-            );
-        }
-        ModalKind::SnapMessage { .. } => {
-            let parts = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
-                .split(inner);
-
-            let mut lines = Vec::new();
-            for s in &modal.lines {
-                lines.push(Line::from(s.as_str()));
-            }
-            if lines.is_empty() {
-                lines.push(Line::from(""));
-            }
-
-            let scroll = modal.scroll.min(lines.len().saturating_sub(1)) as u16;
-            frame.render_widget(
-                Paragraph::new(lines)
-                    .wrap(Wrap { trim: false })
-                    .scroll((scroll, 0)),
-                parts[0],
-            );
-
-            let prompt = "message> ";
-            let input_line = Line::from(vec![
-                Span::styled(prompt, Style::default().fg(Color::Yellow)),
-                Span::raw(modal.input.buf.as_str()),
-            ]);
-            frame.render_widget(
-                Paragraph::new(input_line)
-                    .block(Block::default().borders(Borders::ALL).title("Edit")),
-                parts[1],
-            );
-
-            let x = prompt.len() as u16 + modal.input.cursor as u16;
-            let y = parts[1].y + 1;
-            frame.set_cursor_position((parts[1].x + 1 + x, y));
-        }
-        ModalKind::TextInput { prompt, .. } => {
-            let parts = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
-                .split(inner);
-
-            let mut lines = Vec::new();
-            for s in &modal.lines {
-                lines.push(Line::from(s.as_str()));
-            }
-            if lines.is_empty() {
-                lines.push(Line::from(""));
-            }
-
-            let scroll = modal.scroll.min(lines.len().saturating_sub(1)) as u16;
-            frame.render_widget(
-                Paragraph::new(lines)
-                    .wrap(Wrap { trim: false })
-                    .scroll((scroll, 0)),
-                parts[0],
-            );
-
-            let input_line = Line::from(vec![
-                Span::styled(prompt.as_str(), Style::default().fg(Color::Yellow)),
-                Span::raw(modal.input.buf.as_str()),
-            ]);
-            frame.render_widget(
-                Paragraph::new(input_line)
-                    .block(Block::default().borders(Borders::ALL).title("Edit")),
-                parts[1],
-            );
-
-            let x = prompt.len() as u16 + modal.input.cursor as u16;
-            let y = parts[1].y + 1;
-            frame.set_cursor_position((parts[1].x + 1 + x, y));
-        }
-        ModalKind::ConfirmAction { .. } => {
-            let mut lines = Vec::new();
-            for s in &modal.lines {
-                lines.push(Line::from(s.as_str()));
-            }
-            if lines.is_empty() {
-                lines.push(Line::from(""));
-            }
-            let scroll = modal.scroll.min(lines.len().saturating_sub(1)) as u16;
-            frame.render_widget(
-                Paragraph::new(lines)
-                    .wrap(Wrap { trim: false })
-                    .scroll((scroll, 0)),
-                inner,
-            );
-        }
-    }
-}
-
-fn expand_rect(
-    r: ratatui::layout::Rect,
-    dx: u16,
-    dy: u16,
-    bounds: ratatui::layout::Rect,
-) -> ratatui::layout::Rect {
-    let x0 = r.x.saturating_sub(dx);
-    let y0 = r.y.saturating_sub(dy);
-    let x1 = (r.x + r.width + dx).min(bounds.x + bounds.width);
-    let y1 = (r.y + r.height + dy).min(bounds.y + bounds.height);
-
-    ratatui::layout::Rect {
-        x: x0,
-        y: y0,
-        width: x1.saturating_sub(x0),
-        height: y1.saturating_sub(y0),
-    }
-}
-
-fn centered_rect(
-    percent_x: u16,
-    percent_y: u16,
-    r: ratatui::layout::Rect,
-) -> ratatui::layout::Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
+// centered_rect/expand_rect were used by the old modal renderer.
 
 // Legacy view rendering (pre-View trait). Kept temporarily for reference.
 #[cfg(any())]
