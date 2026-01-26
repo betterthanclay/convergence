@@ -34,6 +34,7 @@ No product/UX changes except tiny wiring fixes required by the refactor.
 - [x] Move `View`/`RenderCtx` + chrome helpers to `src/tui_shell/view.rs`.
 - [ ] Split views into `src/tui_shell/views/*.rs` (root/snaps/inbox/bundles/release/lanes/superpositions/settings).
 - [x] Move History (Snaps) view to `src/tui_shell/views/snaps.rs`.
+- [x] Move Inbox/Bundles/Lanes/Releases views into `src/tui_shell/views/`.
 - [ ] Move modal rendering + handling to `src/tui_shell/modal.rs`.
 - [ ] Move wizards to `src/tui_shell/wizard.rs`.
 
