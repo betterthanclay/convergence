@@ -672,6 +672,8 @@ impl App {
                 };
                 if v.selected_is_pending() {
                     vec!["snap".to_string(), "revert".to_string()]
+                } else if v.selected_is_clean() {
+                    vec!["unsnap".to_string()]
                 } else {
                     vec!["restore".to_string(), "msg".to_string()]
                 }
@@ -778,6 +780,7 @@ impl App {
             // Local filesystem destructive.
             (UiMode::Snaps, _, "restore") => true,
             (UiMode::Snaps, _, "revert") => true,
+            (UiMode::Snaps, _, "unsnap") => true,
 
             // Remote state mutations that are hard to "undo".
             (UiMode::Bundles, _, "promote") => true,
@@ -1492,6 +1495,7 @@ impl App {
                 "snap" => self.cmd_snaps_snap(args),
                 "msg" => self.cmd_snaps_msg(args),
                 "revert" => self.cmd_snaps_revert(args),
+                "unsnap" => self.cmd_snaps_unsnap(args),
                 "restore" => self.cmd_snaps_restore(args),
                 _ => {
                     if !self.dispatch_global(cmd, args) {
@@ -1976,7 +1980,9 @@ impl App {
                     .map(|lines| extract_change_summary(lines).0)
                     .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
 
-                let selected_row = if pending_changes.is_some() && !items.is_empty() {
+                let has_header =
+                    pending_changes.is_some() || (pending_changes.is_none() && head_id.is_some());
+                let selected_row = if has_header && !items.is_empty() {
                     1
                 } else {
                     0
@@ -2012,6 +2018,7 @@ impl App {
                 selected_row,
                 updated_at,
                 pending_changes,
+                head_id,
                 ..
             }) => {
                 if q.is_empty() {
@@ -2033,7 +2040,9 @@ impl App {
 
                     *filter = Some(q);
                     *items = next;
-                    *selected_row = if pending_changes.is_some() && !items.is_empty() {
+                    let has_header = pending_changes.is_some()
+                        || (pending_changes.is_none() && head_id.is_some());
+                    *selected_row = if has_header && !items.is_empty() {
                         1
                     } else {
                         0
@@ -2065,11 +2074,14 @@ impl App {
                 selected_row,
                 updated_at,
                 pending_changes,
+                head_id,
                 ..
             }) => {
                 *filter = None;
                 *items = all_items.clone();
-                *selected_row = if pending_changes.is_some() && !items.is_empty() {
+                let has_header =
+                    pending_changes.is_some() || (pending_changes.is_none() && head_id.is_some());
+                *selected_row = if has_header && !items.is_empty() {
                     1
                 } else {
                     0
@@ -2122,7 +2134,9 @@ impl App {
                         .map(|lines| extract_change_summary(lines).0)
                         .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
 
-                    v.selected_row = if v.pending_changes.is_some() && !v.items.is_empty() {
+                    let has_header = v.pending_changes.is_some()
+                        || (v.pending_changes.is_none() && v.head_id.is_some());
+                    v.selected_row = if has_header && !v.items.is_empty() {
                         1
                     } else {
                         0
@@ -2192,7 +2206,9 @@ impl App {
                         .map(|lines| extract_change_summary(lines).0)
                         .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
 
-                    v.selected_row = if v.pending_changes.is_some() && !v.items.is_empty() {
+                    let has_header = v.pending_changes.is_some()
+                        || (v.pending_changes.is_none() && v.head_id.is_some());
+                    v.selected_row = if has_header && !v.items.is_empty() {
                         1
                     } else {
                         0
@@ -2204,6 +2220,97 @@ impl App {
             }
             Err(err) => self.push_error(format!("revert: {:#}", err)),
         }
+    }
+
+    fn cmd_snaps_unsnap(&mut self, args: &[String]) {
+        if !args.is_empty() {
+            self.push_error("usage: unsnap".to_string());
+            return;
+        }
+
+        let Some(v) = self.current_view::<SnapsView>() else {
+            self.push_error("not in snaps mode".to_string());
+            return;
+        };
+        if !v.selected_is_clean() {
+            self.push_error("select the clean row to unsnap".to_string());
+            return;
+        }
+
+        let action = PendingAction::Mode {
+            mode: UiMode::Snaps,
+            cmd: "unsnap".to_string(),
+        };
+        if !self.action_is_confirmed(&action) {
+            self.open_confirm_modal(action);
+            return;
+        }
+
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+        let Some(head_id) = ws.store.get_head().ok().flatten() else {
+            self.push_error("no head snap to unsnap".to_string());
+            return;
+        };
+
+        let snaps = match ws.list_snaps() {
+            Ok(s) => s,
+            Err(err) => {
+                self.push_error(format!("list snaps: {:#}", err));
+                return;
+            }
+        };
+        let head_pos = snaps.iter().position(|s| s.id == head_id);
+        let next_head = head_pos
+            .and_then(|i| snaps.get(i + 1))
+            .map(|s| s.id.clone());
+
+        if let Err(err) = ws.store.delete_snap(&head_id) {
+            self.push_error(format!("unsnap: {:#}", err));
+            return;
+        }
+        if let Err(err) = ws.store.set_head(next_head.as_deref()) {
+            self.push_error(format!("unsnap: {:#}", err));
+            return;
+        }
+
+        self.push_output(vec![format!("unsnapped {}", head_id)]);
+
+        let ts_mode = self.ts_mode;
+        if let Some(v) = self.current_view_mut::<SnapsView>() {
+            let items = match ws.list_snaps() {
+                Ok(s) => s,
+                Err(err) => {
+                    self.push_error(format!("list snaps: {:#}", err));
+                    return;
+                }
+            };
+
+            v.all_items = items.clone();
+            v.items = items;
+            v.head_id = next_head.clone();
+
+            let rctx = RenderCtx {
+                now: OffsetDateTime::now_utc(),
+                ts_mode,
+            };
+            v.pending_changes = local_status_lines(&ws, &rctx)
+                .ok()
+                .map(|lines| extract_change_summary(lines).0)
+                .and_then(|sum| if sum.total() > 0 { Some(sum) } else { None });
+
+            let has_header =
+                v.pending_changes.is_some() || (v.pending_changes.is_none() && v.head_id.is_some());
+            v.selected_row = if has_header && !v.items.is_empty() {
+                1
+            } else {
+                0
+            };
+            v.updated_at = now_ts();
+        }
+
+        self.refresh_root_view();
     }
 
     fn cmd_snaps_restore(&mut self, args: &[String]) {

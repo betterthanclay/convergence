@@ -288,6 +288,12 @@ pub(super) fn snaps_command_defs() -> Vec<CommandDef> {
             help: "Revert pending changes back to head (confirm)",
         },
         CommandDef {
+            name: "unsnap",
+            aliases: &[],
+            usage: "unsnap",
+            help: "Delete head snap while keeping the workspace state (confirm)",
+        },
+        CommandDef {
             name: "restore",
             aliases: &[],
             usage: "restore [<snap>] [force]",

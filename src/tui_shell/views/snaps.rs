@@ -26,9 +26,17 @@ impl SnapsView {
         self.pending_changes.is_some_and(|s| s.total() > 0)
     }
 
+    fn has_clean_row(&self) -> bool {
+        self.pending_changes.is_none() && self.head_id.is_some() && !self.all_items.is_empty()
+    }
+
+    fn has_header_row(&self) -> bool {
+        self.has_pending_row() || self.has_clean_row()
+    }
+
     fn rows_len(&self) -> usize {
         let mut n = self.items.len();
-        if self.has_pending_row() {
+        if self.has_header_row() {
             n += 1;
         }
         if self.items.is_empty() {
@@ -41,12 +49,16 @@ impl SnapsView {
         self.has_pending_row() && self.selected_row.min(self.rows_len().saturating_sub(1)) == 0
     }
 
+    pub(in crate::tui_shell) fn selected_is_clean(&self) -> bool {
+        self.has_clean_row() && self.selected_row.min(self.rows_len().saturating_sub(1)) == 0
+    }
+
     pub(in crate::tui_shell) fn selected_snap_index(&self) -> Option<usize> {
         if self.items.is_empty() {
             return None;
         }
         let row = self.selected_row.min(self.rows_len().saturating_sub(1));
-        let idx = if self.has_pending_row() {
+        let idx = if self.has_header_row() {
             if row == 0 {
                 return None;
             }
@@ -117,12 +129,13 @@ impl View for SnapsView {
             .fg(Color::Green)
             .add_modifier(Modifier::BOLD);
 
-        if let Some(sum) = self.pending_changes
-            && has_pending
-        {
+        if has_pending {
+            let sum = self.pending_changes.unwrap_or_default();
             let total = sum.total();
             let label = if total == 1 { "change" } else { "changes" };
             rows.push(ListItem::new(format!("> {} {}", total, label)).style(head_style));
+        } else if self.has_clean_row() {
+            rows.push(ListItem::new("> clean").style(head_style));
         }
 
         for s in &self.items {
@@ -177,6 +190,20 @@ impl View for SnapsView {
                 )),
                 Line::from(""),
                 Line::from("Enter: snap (or rotate hint to revert)"),
+            ]
+        } else if self.selected_is_clean() {
+            let head = self
+                .head_id
+                .as_deref()
+                .unwrap_or("<none>")
+                .chars()
+                .take(8)
+                .collect::<String>();
+            vec![
+                Line::from("pending: none"),
+                Line::from(format!("head: {}", head)),
+                Line::from(""),
+                Line::from("Enter: unsnap"),
             ]
         } else if let Some(idx) = self.selected_snap_index() {
             let s = &self.items[idx];

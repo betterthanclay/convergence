@@ -375,15 +375,13 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                     Ok(snaps) => {
                         v.all_items = snaps.clone();
                         v.items = snaps;
+                        v.head_id = ws.store.get_head().ok().flatten();
                         if let Some(sel) = selected_id
                             && let Some(i) = v.items.iter().position(|s| s.id == sel)
                         {
-                            let row_offset = if v.pending_changes.is_some_and(|s| s.total() > 0) {
-                                1
-                            } else {
-                                0
-                            };
-                            v.selected_row = i + row_offset;
+                            let has_header = v.pending_changes.is_some_and(|s| s.total() > 0)
+                                || (v.pending_changes.is_none() && v.head_id.is_some());
+                            v.selected_row = i + if has_header { 1 } else { 0 };
                         }
                         v.updated_at = super::app::now_ts();
                     }
