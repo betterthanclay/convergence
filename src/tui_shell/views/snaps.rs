@@ -5,9 +5,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use super::super::{
-    ChangeSummary, RenderCtx, UiMode, View, fmt_ts_list, fmt_ts_ui, render_view_chrome,
-};
+use super::super::status::ChangeSummary;
+use super::super::{RenderCtx, UiMode, View, fmt_ts_list, fmt_ts_ui, render_view_chrome};
 
 #[derive(Debug)]
 pub(in crate::tui_shell) struct SnapsView {

@@ -5,9 +5,10 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use super::super::{
-    ObjectId, RenderCtx, ResolutionDecision, ResolutionValidation, UiMode, View, render_view_chrome,
-};
+use crate::model::{ObjectId, ResolutionDecision};
+use crate::resolve::ResolutionValidation;
+
+use super::super::{RenderCtx, UiMode, View, render_view_chrome};
 
 #[derive(Debug)]
 pub(in crate::tui_shell) struct SuperpositionsView {

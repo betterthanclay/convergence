@@ -20,8 +20,9 @@ No product/UX changes except tiny wiring fixes required by the refactor.
 
 ### A) Establish Module Layout
 
-- [x] Create `src/tui_shell/` submodules and convert `src/tui_shell.rs` into a thin entry point.
-- [ ] Add a short `src/tui_shell/README.md` documenting "where things live".
+- [x] Create `src/tui_shell/` submodules.
+- [x] Convert `src/tui_shell.rs` into a thin entry point (`src/tui_shell/mod.rs` + `src/tui_shell/app.rs`).
+- [x] Add a short `src/tui_shell/README.md` documenting "where things live".
 
 ### B) Extract Pure Types + Helpers
 
@@ -32,18 +33,18 @@ No product/UX changes except tiny wiring fixes required by the refactor.
 ### C) Extract UI Components
 
 - [x] Move `View`/`RenderCtx` + chrome helpers to `src/tui_shell/view.rs`.
-- [ ] Split views into `src/tui_shell/views/*.rs` (root/snaps/inbox/bundles/release/lanes/superpositions/settings).
+- [x] Split remaining views into `src/tui_shell/views/*.rs` (root).
 - [x] Move History (Snaps) view to `src/tui_shell/views/snaps.rs`.
 - [x] Move Inbox/Bundles/Lanes/Releases views into `src/tui_shell/views/`.
 - [x] Move Settings and Superpositions views into `src/tui_shell/views/`.
-- [ ] Move modal rendering + handling to `src/tui_shell/modal.rs`.
-- [ ] Move wizards to `src/tui_shell/wizard.rs`.
+- [x] Move modal rendering + handling to `src/tui_shell/modal.rs`.
+- [x] Move wizards to `src/tui_shell/wizard.rs`.
 
 ### D) Extract Status/Diff Logic
 
-- [ ] Move `local_status_lines`/`remote_status_lines` + diff helpers into `src/tui_shell/status.rs`.
+- [x] Move `local_status_lines`/`remote_status_lines` + diff helpers into `src/tui_shell/status.rs`.
 
 ## Exit Criteria
 
-- `src/tui_shell.rs` is <= ~300 lines and mostly `mod ...;` + re-exports + top-level entry.
+- `src/tui_shell/mod.rs` is <= ~300 lines and mostly `mod ...;` + shared imports + top-level entry.
 - `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo nextest run -P ci` pass.
