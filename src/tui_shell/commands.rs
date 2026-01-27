@@ -131,6 +131,12 @@ pub(super) fn remote_root_command_defs() -> Vec<CommandDef> {
             help: "Bootstrap first admin (guided)",
         },
         CommandDef {
+            name: "create-repo",
+            aliases: &[],
+            usage: "create-repo",
+            help: "Create the configured repo on the server",
+        },
+        CommandDef {
             name: "status",
             aliases: &["st"],
             usage: "status",

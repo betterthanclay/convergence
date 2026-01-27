@@ -562,6 +562,14 @@ impl Default for App {
 }
 
 impl App {
+    fn remote_repo_missing(&self) -> bool {
+        if self.mode() != UiMode::Root || self.root_ctx != RootContext::Remote {
+            return false;
+        }
+        self.current_view::<RootView>()
+            .is_some_and(|v| v.remote_repo_missing())
+    }
+
     fn available_command_defs(&self) -> Vec<CommandDef> {
         let mode = self.mode();
         let root_ctx = self.root_ctx;
@@ -598,6 +606,21 @@ impl App {
                     || d.name == "help"
                     || d.name == "quit"
                     || d.name == "clear"
+            });
+        }
+
+        // If the remote repo doesn't exist yet, only offer repo setup + safe navigation.
+        if mode == UiMode::Root && root_ctx == RootContext::Remote && self.remote_repo_missing() {
+            defs.retain(|d| {
+                d.name == "create-repo"
+                    || d.name == "remote"
+                    || d.name == "ping"
+                    || d.name == "login"
+                    || d.name == "bootstrap"
+                    || d.name == "help"
+                    || d.name == "quit"
+                    || d.name == "clear"
+                    || d.name == "refresh"
             });
         }
 
@@ -681,6 +704,8 @@ impl App {
                 RootContext::Remote => {
                     if !self.remote_configured || self.remote_identity.is_none() {
                         vec!["login".to_string(), "bootstrap".to_string()]
+                    } else if self.remote_repo_missing() {
+                        vec!["create-repo".to_string()]
                     } else {
                         vec!["inbox".to_string(), "releases".to_string()]
                     }
@@ -1428,6 +1453,7 @@ impl App {
             RootContext::Remote => match cmd {
                 "status" => self.cmd_status(args),
                 "bootstrap" => self.cmd_bootstrap(args),
+                "create-repo" => self.cmd_create_repo(args),
                 "refresh" | "r" => {
                     let _ = args;
                     self.refresh_root_view();
@@ -3334,6 +3360,33 @@ impl App {
         }
         self.push_output(vec!["remote unset".to_string()]);
         self.refresh_root_view();
+    }
+
+    fn cmd_create_repo(&mut self, args: &[String]) {
+        if !args.is_empty() {
+            self.push_error("usage: create-repo".to_string());
+            return;
+        }
+
+        let client = match self.remote_client() {
+            Some(c) => c,
+            None => {
+                // This typically means we need login first.
+                self.start_login_wizard();
+                return;
+            }
+        };
+
+        let repo_id = client.remote().repo_id.clone();
+        match client.create_repo(&repo_id) {
+            Ok(_) => {
+                self.push_output(vec![format!("created repo {}", repo_id)]);
+                self.refresh_root_view();
+            }
+            Err(err) => {
+                self.push_error(format!("create-repo: {:#}", err));
+            }
+        }
     }
 
     fn cmd_bootstrap(&mut self, args: &[String]) {

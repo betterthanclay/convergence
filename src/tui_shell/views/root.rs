@@ -107,6 +107,14 @@ impl RootView {
         }
         self.updated_at = now_ts();
     }
+
+    pub(in crate::tui_shell) fn remote_repo_missing(&self) -> bool {
+        self.ctx == RootContext::Remote
+            && self
+                .lines
+                .iter()
+                .any(|l| l.to_lowercase().contains("remote repo not found"))
+    }
 }
 
 impl View for RootView {
