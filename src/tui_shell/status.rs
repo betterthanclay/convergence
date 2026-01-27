@@ -1006,207 +1006,178 @@ pub(super) fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec
     Ok(lines)
 }
 
-pub(super) fn dashboard_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec<String>> {
-    #[derive(Default)]
-    struct RemoteSummary {
-        configured: bool,
-        healthz: Option<String>,
-        repo: Option<String>,
-        scope: Option<String>,
-        gate: Option<String>,
-        inbox_total: usize,
-        inbox_pending: usize,
-        inbox_resolved: usize,
-        inbox_missing_local: usize,
-        bundles_total: usize,
-        bundles_promotable: usize,
-        bundles_blocked: usize,
-        pinned_bundles: usize,
-        releases_total: usize,
-        releases_channels: usize,
-        gates_total: usize,
-        terminal_gate: Option<String>,
+#[derive(Debug, Clone)]
+pub(super) struct DashboardData {
+    pub(super) healthz: Option<String>,
+    pub(super) gates_total: usize,
+    pub(super) terminal_gate: Option<String>,
+
+    pub(super) inbox_total: usize,
+    pub(super) inbox_pending: usize,
+    pub(super) inbox_resolved: usize,
+    pub(super) inbox_missing_local: usize,
+    pub(super) latest_publication: Option<(String, String)>,
+
+    pub(super) bundles_total: usize,
+    pub(super) bundles_promotable: usize,
+    pub(super) bundles_blocked: usize,
+    pub(super) blocked_superpositions: usize,
+    pub(super) blocked_approvals: usize,
+    pub(super) pinned_bundles: usize,
+
+    pub(super) promotion_state: Vec<(String, String)>,
+
+    pub(super) releases_total: usize,
+    pub(super) releases_channels: usize,
+    pub(super) latest_releases: Vec<(String, String, String)>,
+
+    pub(super) next_actions: Vec<String>,
+}
+
+pub(super) fn dashboard_data(ws: &Workspace, ctx: &RenderCtx) -> Result<DashboardData> {
+    let cfg = ws.store.read_config()?;
+    let Some(remote) = cfg.remote else {
+        anyhow::bail!("remote: not configured");
+    };
+
+    let token = ws.store.get_remote_token(&remote)?;
+    let Some(token) = token else {
+        anyhow::bail!("token missing");
+    };
+
+    let mut out = DashboardData {
+        healthz: None,
+        gates_total: 0,
+        terminal_gate: None,
+
+        inbox_total: 0,
+        inbox_pending: 0,
+        inbox_resolved: 0,
+        inbox_missing_local: 0,
+        latest_publication: None,
+
+        bundles_total: 0,
+        bundles_promotable: 0,
+        bundles_blocked: 0,
+        blocked_superpositions: 0,
+        blocked_approvals: 0,
+        pinned_bundles: 0,
+
+        promotion_state: Vec::new(),
+
+        releases_total: 0,
+        releases_channels: 0,
+        latest_releases: Vec::new(),
+
+        next_actions: Vec::new(),
+    };
+
+    // healthz
+    let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
+    let start = std::time::Instant::now();
+    match reqwest::blocking::get(&url) {
+        Ok(r) => {
+            let ms = start.elapsed().as_millis();
+            out.healthz = Some(format!("{} {}ms", r.status(), ms));
+        }
+        Err(err) => {
+            out.healthz = Some(format!("error {:#}", err));
+        }
     }
 
-    fn remote_summary(ws: &Workspace, ctx: &RenderCtx) -> Result<(Vec<String>, RemoteSummary)> {
-        let mut out = Vec::new();
-        let mut sum = RemoteSummary::default();
-        let cfg = ws.store.read_config()?;
-        let Some(remote) = cfg.remote else {
-            out.push("Remote".to_string());
-            out.push("remote: (not configured)".to_string());
-            out.push(
-                "hint: login --url <url> --token <token> --repo <id> [--scope <id>] [--gate <id>]"
-                    .to_string(),
-            );
-            return Ok((out, sum));
-        };
+    let client = RemoteClient::new(remote.clone(), token)?;
 
-        sum.configured = true;
-        sum.repo = Some(remote.repo_id.clone());
-        sum.scope = Some(remote.scope.clone());
-        sum.gate = Some(remote.gate.clone());
+    // Gates.
+    if let Ok(graph) = client.get_gate_graph() {
+        out.gates_total = graph.gates.len();
+        out.terminal_gate = Some(graph.terminal_gate);
+    }
 
-        out.push("Remote".to_string());
-        out.push(format!("remote: {}", remote.base_url));
-        out.push(format!("repo: {}", remote.repo_id));
-        out.push(format!("scope: {}", remote.scope));
-        out.push(format!("gate: {}", remote.gate));
+    // Inbox.
+    let mut pubs = client.list_publications()?;
+    pubs.retain(|p| p.scope == remote.scope && p.gate == remote.gate);
+    out.inbox_total = pubs.len();
+    out.inbox_resolved = pubs.iter().filter(|p| p.resolution.is_some()).count();
+    out.inbox_pending = out.inbox_total.saturating_sub(out.inbox_resolved);
+    out.inbox_missing_local = pubs
+        .iter()
+        .filter(|p| !ws.store.has_snap(&p.snap_id))
+        .count();
+    pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    if let Some(p) = pubs.first() {
+        out.latest_publication = Some((
+            p.snap_id.chars().take(8).collect::<String>(),
+            super::fmt_ts_list(&p.created_at, ctx),
+        ));
+    }
 
-        let token = ws.store.get_remote_token(&remote)?;
-        if token.is_some() {
-            out.push("token: (configured)".to_string());
-        } else {
-            out.push("token: (missing; run `login --url ... --token ... --repo ...`)".to_string());
-            return Ok((out, sum));
+    // Bundles.
+    let mut bundles = client.list_bundles()?;
+    bundles.retain(|b| b.scope == remote.scope && b.gate == remote.gate);
+    out.bundles_total = bundles.len();
+    out.bundles_promotable = bundles.iter().filter(|b| b.promotable).count();
+    out.bundles_blocked = out.bundles_total.saturating_sub(out.bundles_promotable);
+    for b in &bundles {
+        if b.promotable {
+            continue;
         }
-
-        // healthz
-        let url = format!("{}/healthz", remote.base_url.trim_end_matches('/'));
-        let start = std::time::Instant::now();
-        match reqwest::blocking::get(&url) {
-            Ok(r) => {
-                let ms = start.elapsed().as_millis();
-                sum.healthz = Some(format!("{} {}ms", r.status(), ms));
-                out.push(format!("healthz: {} {}ms", r.status(), ms));
-            }
-            Err(err) => {
-                sum.healthz = Some("error".to_string());
-                out.push(format!("healthz: error {:#}", err));
-            }
+        if b.reasons.iter().any(|r| r == "superpositions_present") {
+            out.blocked_superpositions += 1;
         }
+        if b.reasons.iter().any(|r| r == "approvals_missing") {
+            out.blocked_approvals += 1;
+        }
+    }
+    if let Ok(pins) = client.list_pins() {
+        out.pinned_bundles = pins.bundles.len();
+    }
 
-        let client = RemoteClient::new(remote.clone(), token.expect("checked is_some above"))?;
+    // Promotion state (current scope).
+    if let Ok(state) = client.promotion_state(&remote.scope) {
+        let mut keys = state.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        for gate in keys {
+            let bid = state.get(&gate).cloned().unwrap_or_default();
+            let short = bid.chars().take(8).collect::<String>();
+            out.promotion_state.push((gate, short));
+        }
+    }
 
-        // Gate graph stats.
-        if let Ok(graph) = client.get_gate_graph() {
-            sum.gates_total = graph.gates.len();
-            sum.terminal_gate = Some(graph.terminal_gate.clone());
-            out.push(format!(
-                "gates: {} (terminal {})",
-                graph.gates.len(),
-                graph.terminal_gate
+    // Releases.
+    if let Ok(releases) = client.list_releases() {
+        out.releases_total = releases.len();
+        let latest = super::latest_releases_by_channel(releases);
+        out.releases_channels = latest.len();
+        for r in latest.into_iter().take(3) {
+            out.latest_releases.push((
+                r.channel,
+                r.bundle_id.chars().take(8).collect::<String>(),
+                super::fmt_ts_list(&r.released_at, ctx),
             ));
         }
-
-        // Inbox stats.
-        let mut pubs = client.list_publications()?;
-        pubs.retain(|p| p.scope == remote.scope && p.gate == remote.gate);
-        sum.inbox_total = pubs.len();
-        sum.inbox_resolved = pubs.iter().filter(|p| p.resolution.is_some()).count();
-        sum.inbox_pending = sum.inbox_total.saturating_sub(sum.inbox_resolved);
-        sum.inbox_missing_local = pubs
-            .iter()
-            .filter(|p| !ws.store.has_snap(&p.snap_id))
-            .count();
-
-        out.push(format!(
-            "inbox: {} total ({} pending, {} resolved)",
-            sum.inbox_total, sum.inbox_pending, sum.inbox_resolved
-        ));
-        if sum.inbox_missing_local > 0 {
-            out.push(format!(
-                "inbox: {} snaps missing locally (use `fetch`)",
-                sum.inbox_missing_local
-            ));
-        }
-
-        // Bundle stats.
-        let mut bundles = client.list_bundles()?;
-        bundles.retain(|b| b.scope == remote.scope && b.gate == remote.gate);
-        sum.bundles_total = bundles.len();
-        sum.bundles_promotable = bundles.iter().filter(|b| b.promotable).count();
-        sum.bundles_blocked = sum.bundles_total.saturating_sub(sum.bundles_promotable);
-        out.push(format!(
-            "bundles: {} total ({} promotable, {} blocked)",
-            sum.bundles_total, sum.bundles_promotable, sum.bundles_blocked
-        ));
-
-        if let Ok(pins) = client.list_pins() {
-            sum.pinned_bundles = pins.bundles.len();
-            out.push(format!("pinned_bundles: {}", sum.pinned_bundles));
-        }
-
-        // Promotion pointers.
-        let promotion_state = client.promotion_state(&remote.scope)?;
-        if promotion_state.is_empty() {
-            out.push("promotion_state: (none)".to_string());
-        } else {
-            out.push(format!("promotion_state: {} gates", promotion_state.len()));
-        }
-
-        // Release summary.
-        if let Ok(releases) = client.list_releases() {
-            sum.releases_total = releases.len();
-            let latest = super::latest_releases_by_channel(releases);
-            sum.releases_channels = latest.len();
-            if sum.releases_total == 0 {
-                out.push("releases: (none)".to_string());
-            } else {
-                out.push(format!(
-                    "releases: {} total ({} channels)",
-                    sum.releases_total, sum.releases_channels
-                ));
-                for r in latest.iter().take(3) {
-                    let short = r.bundle_id.chars().take(8).collect::<String>();
-                    out.push(format!(
-                        "release: {} {} {}",
-                        r.channel,
-                        short,
-                        super::fmt_ts_list(&r.released_at, ctx)
-                    ));
-                }
-            }
-        }
-
-        // A tiny recency hint.
-        pubs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        if let Some(p) = pubs.first() {
-            out.push(format!(
-                "latest_publication: {} {}",
-                p.snap_id.chars().take(8).collect::<String>(),
-                super::fmt_ts_list(&p.created_at, ctx)
-            ));
-        }
-
-        Ok((out, sum))
     }
 
-    let (remote_lines, remote) = remote_summary(ws, ctx)?;
-
-    let mut actions: Vec<String> = Vec::new();
-    if remote.configured && remote.inbox_pending > 0 {
+    // Next actions (keep short and prioritized).
+    let mut actions = Vec::new();
+    if out.inbox_pending > 0 {
+        actions.push(format!("open inbox ({} pending)", out.inbox_pending));
+    }
+    if out.inbox_missing_local > 0 {
+        actions.push(format!("fetch missing snaps ({})", out.inbox_missing_local));
+    }
+    if out.bundles_promotable > 0 {
+        actions.push(format!("promote bundles ({})", out.bundles_promotable));
+    }
+    if out.blocked_superpositions > 0 {
         actions.push(format!(
-            "Remote: {} inbox items pending (open `inbox`)",
-            remote.inbox_pending
+            "resolve superpositions ({})",
+            out.blocked_superpositions
         ));
     }
-    if remote.configured && remote.bundles_promotable > 0 {
-        actions.push(format!(
-            "Remote: {} promotable bundles (open `bundles`)",
-            remote.bundles_promotable
-        ));
+    if out.blocked_approvals > 0 {
+        actions.push(format!("collect approvals ({})", out.blocked_approvals));
     }
-    if remote.configured && remote.inbox_missing_local > 0 {
-        actions.push(format!(
-            "Remote: {} snaps missing locally (run `fetch`)",
-            remote.inbox_missing_local
-        ));
-    }
-
-    let mut out = Vec::new();
-    out.push("Action items".to_string());
-    if actions.is_empty() {
-        out.push("(none)".to_string());
-    } else {
-        for a in actions {
-            out.push(format!("- {}", a));
-        }
-    }
-
-    out.push("".to_string());
-
-    out.extend(remote_lines);
+    out.next_actions = actions.into_iter().take(4).collect();
 
     Ok(out)
 }

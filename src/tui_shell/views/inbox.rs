@@ -11,13 +11,17 @@ use super::super::{RenderCtx, UiMode, View, fmt_ts_ui};
 #[derive(Debug)]
 pub(in crate::tui_shell) struct InboxView {
     pub(in crate::tui_shell) updated_at: String,
-    pub(in crate::tui_shell) repo: String,
     pub(in crate::tui_shell) scope: String,
     pub(in crate::tui_shell) gate: String,
     pub(in crate::tui_shell) filter: Option<String>,
     pub(in crate::tui_shell) limit: Option<usize>,
     pub(in crate::tui_shell) items: Vec<crate::remote::Publication>,
     pub(in crate::tui_shell) selected: usize,
+
+    pub(in crate::tui_shell) total: usize,
+    pub(in crate::tui_shell) pending: usize,
+    pub(in crate::tui_shell) resolved: usize,
+    pub(in crate::tui_shell) missing_local: usize,
 }
 
 impl View for InboxView {
@@ -59,12 +63,10 @@ impl View for InboxView {
             Span::styled(self.title().to_string(), Style::default().fg(Color::Yellow)),
             Span::raw("  "),
             Span::styled(
-                format!("repo={} scope={} gate={}", self.repo, self.scope, self.gate),
-                Style::default().fg(Color::Gray),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                fmt_ts_ui(self.updated_at()),
+                format!(
+                    "{} total  {} pending  {} resolved  {} missing",
+                    self.total, self.pending, self.resolved, self.missing_local
+                ),
                 Style::default().fg(Color::Gray),
             ),
         ]);

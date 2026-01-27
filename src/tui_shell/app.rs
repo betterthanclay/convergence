@@ -563,15 +563,12 @@ impl App {
         self.refresh_root_view();
     }
 
-    fn switch_to_remote_inbox(&mut self) {
+    fn switch_to_remote_root(&mut self) {
         self.root_ctx = RootContext::Remote;
         self.frames = vec![ViewFrame {
             view: Box::new(RootView::new(RootContext::Remote)),
         }];
         self.refresh_root_view();
-
-        // Prefer dropping the user into the inbox in remote context.
-        self.cmd_inbox(&[]);
     }
 
     fn remote_repo_missing(&self) -> bool {
@@ -3958,6 +3955,10 @@ impl App {
         filter: Option<String>,
         limit: Option<usize>,
     ) {
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+
         let client = match self.remote_client() {
             Some(c) => c,
             None => {
@@ -3965,8 +3966,6 @@ impl App {
                 return;
             }
         };
-
-        let repo = client.remote().repo_id.clone();
 
         let filter_lc = filter.as_ref().map(|s| s.to_lowercase());
         let pubs = match client.list_publications() {
@@ -4004,18 +4003,29 @@ impl App {
             pubs.truncate(n);
         }
 
-        let count = pubs.len();
+        let total = pubs.len();
+        let resolved = pubs.iter().filter(|p| p.resolution.is_some()).count();
+        let pending = total.saturating_sub(resolved);
+        let missing_local = pubs
+            .iter()
+            .filter(|p| !ws.store.has_snap(&p.snap_id))
+            .count();
+
         self.push_view(InboxView {
             updated_at: now_ts(),
-            repo,
             scope,
             gate,
             filter,
             limit,
             items: pubs,
             selected: 0,
+
+            total,
+            pending,
+            resolved,
+            missing_local,
         });
-        self.push_output(vec![format!("opened inbox ({} items)", count)]);
+        self.push_output(vec![format!("opened inbox ({} items)", total)]);
     }
 
     pub(in crate::tui_shell) fn open_bundles_view(
@@ -5991,7 +6001,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Tab => {
             if app.input.buf.is_empty() {
                 if app.root_ctx == RootContext::Local && app.mode() == UiMode::Root {
-                    app.switch_to_remote_inbox();
+                    app.switch_to_remote_root();
                     app.push_output(vec!["switched to remote context".to_string()]);
                 } else if app.root_ctx == RootContext::Remote {
                     app.switch_to_local_root();

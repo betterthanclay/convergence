@@ -1,14 +1,15 @@
 use std::any::Any;
 
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use crate::workspace::Workspace;
 
 use super::super::app::{now_ts, root_ctx_color};
 use super::super::status::{
-    ChangeSummary, collapse_blank_lines, dashboard_lines, extract_baseline_compact,
+    ChangeSummary, DashboardData, collapse_blank_lines, dashboard_data, extract_baseline_compact,
     extract_change_keys, extract_change_summary, jaccard_similarity, local_status_lines,
 };
 use super::super::view::render_view_chrome_with_header;
@@ -25,9 +26,8 @@ pub(in crate::tui_shell) struct RootView {
     baseline_compact: Option<String>,
     change_keys: Vec<String>,
 
-    remote_repo: Option<String>,
-    remote_scope: Option<String>,
-    remote_gate: Option<String>,
+    remote_dashboard: Option<DashboardData>,
+    remote_err: Option<String>,
 }
 
 impl RootView {
@@ -42,26 +42,12 @@ impl RootView {
             baseline_compact: None,
             change_keys: Vec::new(),
 
-            remote_repo: None,
-            remote_scope: None,
-            remote_gate: None,
+            remote_dashboard: None,
+            remote_err: None,
         }
     }
 
     pub(in crate::tui_shell) fn refresh(&mut self, ws: Option<&Workspace>, ctx: &RenderCtx) {
-        if self.ctx == RootContext::Remote {
-            let remote_cfg = ws
-                .and_then(|ws| ws.store.read_config().ok())
-                .and_then(|c| c.remote);
-            self.remote_repo = remote_cfg.as_ref().map(|r| r.repo_id.clone());
-            self.remote_scope = remote_cfg.as_ref().map(|r| r.scope.clone());
-            self.remote_gate = remote_cfg.as_ref().map(|r| r.gate.clone());
-        } else {
-            self.remote_repo = None;
-            self.remote_scope = None;
-            self.remote_gate = None;
-        }
-
         let prev_lines_len = self.lines.len();
         let prev_baseline = self.baseline_compact.clone();
         let prev_keys = self.change_keys.clone();
@@ -75,8 +61,19 @@ impl RootView {
                 if let Some(lines) = self.remote_auth_block_lines.clone() {
                     lines
                 } else {
-                    dashboard_lines(ws, ctx)
-                        .unwrap_or_else(|e| vec![sanitize_dashboard_err(&format!("{:#}", e))])
+                    match dashboard_data(ws, ctx) {
+                        Ok(d) => {
+                            self.remote_dashboard = Some(d);
+                            self.remote_err = None;
+                            Vec::new()
+                        }
+                        Err(err) => {
+                            self.remote_dashboard = None;
+                            let s = sanitize_dashboard_err(&format!("{:#}", err));
+                            self.remote_err = Some(s.clone());
+                            vec![s]
+                        }
+                    }
                 }
             }
         };
@@ -225,9 +222,6 @@ impl View for RootView {
                 render_view_chrome_with_header(frame, header, area)
             }
             RootContext::Remote => {
-                let repo = self.remote_repo.as_deref().unwrap_or("-");
-                let scope = self.remote_scope.as_deref().unwrap_or("-");
-                let gate = self.remote_gate.as_deref().unwrap_or("-");
                 let header = Line::from(vec![
                     Span::styled(
                         self.title().to_string(),
@@ -235,16 +229,38 @@ impl View for RootView {
                     ),
                     Span::raw("  "),
                     Span::styled(
-                        format!("repo={} scope={} gate={}", repo, scope, gate),
-                        Style::default().fg(Color::Gray),
-                    ),
-                    Span::raw("  "),
-                    Span::styled(
                         fmt_ts_ui(self.updated_at()),
                         Style::default().fg(Color::Gray),
                     ),
                 ]);
-                render_view_chrome_with_header(frame, header, area)
+                let inner = render_view_chrome_with_header(frame, header, area);
+                if let Some(lines) = self.remote_auth_block_lines.as_ref() {
+                    frame.render_widget(
+                        Paragraph::new(
+                            lines
+                                .iter()
+                                .map(|s| Line::from(s.as_str()))
+                                .collect::<Vec<_>>(),
+                        )
+                        .wrap(Wrap { trim: false }),
+                        inner,
+                    );
+                    return;
+                }
+                if let Some(d) = &self.remote_dashboard {
+                    render_remote_dashboard(frame, inner, d);
+                    return;
+                }
+
+                // Fallback error rendering.
+                let err = self.remote_err.as_deref().unwrap_or("dashboard: error");
+                frame.render_widget(
+                    Paragraph::new(vec![Line::from(err)])
+                        .wrap(Wrap { trim: false })
+                        .block(Block::default().borders(Borders::ALL).title("Dashboard")),
+                    inner,
+                );
+                return;
             }
         };
 
@@ -284,6 +300,138 @@ impl View for RootView {
             inner,
         );
     }
+}
+
+fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d: &DashboardData) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(0)])
+        .split(area);
+
+    // Next actions (top row).
+    let mut action_lines: Vec<Line<'static>> = Vec::new();
+    if d.next_actions.is_empty() {
+        action_lines.push(Line::from("(none)"));
+    } else {
+        for a in &d.next_actions {
+            action_lines.push(Line::from(format!("- {}", a)));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(action_lines)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title("Next")),
+        rows[0],
+    );
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(rows[1]);
+
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .split(cols[0]);
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .split(cols[1]);
+
+    // Inbox.
+    let mut inbox_lines: Vec<Line<'static>> = Vec::new();
+    inbox_lines.push(Line::from(format!(
+        "{} total  {} pending  {} resolved",
+        d.inbox_total, d.inbox_pending, d.inbox_resolved
+    )));
+    if d.inbox_missing_local > 0 {
+        inbox_lines.push(Line::from(format!(
+            "{} snaps missing locally",
+            d.inbox_missing_local
+        )));
+    }
+    if let Some((sid, ts)) = &d.latest_publication {
+        inbox_lines.push(Line::from(format!("latest: {} {}", sid, ts)));
+    }
+    frame.render_widget(
+        Paragraph::new(inbox_lines)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title("Inbox")),
+        left[0],
+    );
+
+    // Bundles.
+    let mut bundle_lines: Vec<Line<'static>> = Vec::new();
+    bundle_lines.push(Line::from(format!(
+        "{} total  {} promotable  {} blocked",
+        d.bundles_total, d.bundles_promotable, d.bundles_blocked
+    )));
+    if d.blocked_superpositions > 0 {
+        bundle_lines.push(Line::from(format!(
+            "blocked by superpositions: {}",
+            d.blocked_superpositions
+        )));
+    }
+    if d.blocked_approvals > 0 {
+        bundle_lines.push(Line::from(format!(
+            "blocked by approvals: {}",
+            d.blocked_approvals
+        )));
+    }
+    if d.pinned_bundles > 0 {
+        bundle_lines.push(Line::from(format!("pinned: {}", d.pinned_bundles)));
+    }
+    frame.render_widget(
+        Paragraph::new(bundle_lines)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title("Bundles")),
+        left[1],
+    );
+
+    // Gates / scope.
+    let mut gate_lines: Vec<Line<'static>> = Vec::new();
+    if let Some(h) = &d.healthz {
+        gate_lines.push(Line::from(format!("healthz: {}", h)));
+    }
+    if d.gates_total > 0 {
+        let term = d.terminal_gate.as_deref().unwrap_or("-");
+        gate_lines.push(Line::from(format!(
+            "gates: {} (terminal {})",
+            d.gates_total, term
+        )));
+    }
+    if !d.promotion_state.is_empty() {
+        gate_lines.push(Line::from("promotion_state:"));
+        for (gate, bid) in d.promotion_state.iter().take(4) {
+            gate_lines.push(Line::from(format!("{} {}", gate, bid)));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(gate_lines)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title("Gates")),
+        right[0],
+    );
+
+    // Releases.
+    let mut rel_lines: Vec<Line<'static>> = Vec::new();
+    if d.releases_total == 0 {
+        rel_lines.push(Line::from("(none)"));
+    } else {
+        rel_lines.push(Line::from(format!(
+            "{} total ({} channels)",
+            d.releases_total, d.releases_channels
+        )));
+        for (ch, bid, ts) in d.latest_releases.iter() {
+            rel_lines.push(Line::from(format!("{} {} {}", ch, bid, ts)));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(rel_lines)
+            .wrap(Wrap { trim: false })
+            .block(Block::default().borders(Borders::ALL).title("Releases")),
+        right[1],
+    );
 }
 
 fn style_root_line(s: &str) -> Line<'static> {
