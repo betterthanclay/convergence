@@ -103,7 +103,7 @@ fn upload_metadata_only_snap(
 }
 
 #[test]
-fn non_terminal_release_requires_admin() -> Result<()> {
+fn release_allowed_from_any_gate_by_default() -> Result<()> {
     let server = common::spawn_server()?;
     let client = reqwest::blocking::Client::new();
     let admin_auth = common::auth_header(&server.token);
@@ -118,7 +118,7 @@ fn non_terminal_release_requires_admin() -> Result<()> {
         .error_for_status()
         .context("create repo status")?;
 
-    // Configure a 2-gate graph: dev-intake -> rc, terminal=rc.
+    // Configure a 2-gate graph: dev-intake -> rc.
     let mut graph: serde_json::Value = client
         .get(format!("{}/repos/test/gate-graph", server.base_url))
         .header(reqwest::header::AUTHORIZATION, &admin_auth)
@@ -129,7 +129,6 @@ fn non_terminal_release_requires_admin() -> Result<()> {
         .json()
         .context("parse gate graph")?;
 
-    graph["terminal_gate"] = serde_json::Value::String("rc".to_string());
     let gates = graph
         .get_mut("gates")
         .and_then(|v| v.as_array_mut())
@@ -143,6 +142,7 @@ fn non_terminal_release_requires_admin() -> Result<()> {
         "id": "rc",
         "name": "Release Candidate",
         "upstream": ["dev-intake"],
+        "allow_releases": true,
         "allow_superpositions": false,
         "allow_metadata_only_publications": false,
         "required_approvals": 0
@@ -219,24 +219,131 @@ fn non_terminal_release_requires_admin() -> Result<()> {
         .context("missing bundle id")?
         .to_string();
 
-    // Non-admin cannot release from dev-intake now that terminal is rc.
-    let resp = client
+    // Non-admin can release from dev-intake by default.
+    client
         .post(format!("{}/repos/test/releases", server.base_url))
         .header(reqwest::header::AUTHORIZATION, &alice_auth)
         .json(&serde_json::json!({"channel": "stable", "bundle_id": bundle_id.clone()}))
         .send()
-        .context("create release (alice)")?;
-    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+        .context("create release (alice)")?
+        .error_for_status()
+        .context("create release (alice) status")?;
 
-    // Admin can.
+    Ok(())
+}
+
+#[test]
+fn release_rejected_when_gate_disables_releases() -> Result<()> {
+    let server = common::spawn_server()?;
+    let client = reqwest::blocking::Client::new();
+    let admin_auth = common::auth_header(&server.token);
+
     client
-        .post(format!("{}/repos/test/releases", server.base_url))
+        .post(format!("{}/repos", server.base_url))
         .header(reqwest::header::AUTHORIZATION, &admin_auth)
+        .json(&serde_json::json!({"id": "test"}))
+        .send()
+        .context("create repo")?
+        .error_for_status()
+        .context("create repo status")?;
+
+    // Disable releases on dev-intake.
+    let mut graph: serde_json::Value = client
+        .get(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &admin_auth)
+        .send()
+        .context("get gate graph")?
+        .error_for_status()
+        .context("get gate graph status")?
+        .json()
+        .context("parse gate graph")?;
+
+    let gates = graph
+        .get_mut("gates")
+        .and_then(|v| v.as_array_mut())
+        .context("gate graph gates missing")?;
+    for g in gates.iter_mut() {
+        if g.get("id") == Some(&serde_json::Value::String("dev-intake".to_string())) {
+            g["allow_metadata_only_publications"] = serde_json::Value::Bool(true);
+            g["allow_releases"] = serde_json::Value::Bool(false);
+        }
+    }
+
+    client
+        .put(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &admin_auth)
+        .json(&graph)
+        .send()
+        .context("put gate graph")?
+        .error_for_status()
+        .context("put gate graph status")?;
+
+    let alice_token = create_user_and_token(&client, &server.base_url, &admin_auth, "alice")?;
+    client
+        .post(format!("{}/repos/test/members", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &admin_auth)
+        .json(&serde_json::json!({"handle": "alice", "role": "publish"}))
+        .send()
+        .context("add alice")?
+        .error_for_status()
+        .context("add alice status")?;
+    let alice_auth = common::auth_header(&alice_token);
+
+    let snap_id = upload_metadata_only_snap(
+        &client,
+        &server.base_url,
+        &alice_auth,
+        "test",
+        "2026-01-25T03:00:00Z",
+    )?;
+    let pubrec: serde_json::Value = client
+        .post(format!("{}/repos/test/publications", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &alice_auth)
+        .json(&serde_json::json!({
+            "snap_id": snap_id,
+            "scope": "main",
+            "gate": "dev-intake",
+            "metadata_only": true
+        }))
+        .send()
+        .context("create publication")?
+        .error_for_status()
+        .context("create publication status")?
+        .json()
+        .context("parse publication")?;
+    let pub_id = pubrec
+        .get("id")
+        .and_then(|v| v.as_str())
+        .context("missing pub id")?
+        .to_string();
+
+    let bundle: serde_json::Value = client
+        .post(format!("{}/repos/test/bundles", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &alice_auth)
+        .json(&serde_json::json!({
+            "scope": "main",
+            "gate": "dev-intake",
+            "input_publications": [pub_id]
+        }))
+        .send()
+        .context("create bundle")?
+        .error_for_status()
+        .context("create bundle status")?
+        .json()
+        .context("parse bundle")?;
+    let bundle_id = bundle
+        .get("id")
+        .and_then(|v| v.as_str())
+        .context("missing bundle id")?
+        .to_string();
+
+    let resp = client
+        .post(format!("{}/repos/test/releases", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, &alice_auth)
         .json(&serde_json::json!({"channel": "stable", "bundle_id": bundle_id}))
         .send()
-        .context("create release (admin)")?
-        .error_for_status()
-        .context("create release (admin) status")?;
+        .context("create release (alice)")?;
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
 
     Ok(())
 }

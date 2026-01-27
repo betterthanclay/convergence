@@ -394,11 +394,7 @@ fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d: &Dashboard
         gate_lines.push(Line::from(format!("healthz: {}", h)));
     }
     if d.gates_total > 0 {
-        let term = d.terminal_gate.as_deref().unwrap_or("-");
-        gate_lines.push(Line::from(format!(
-            "gates: {} (terminal {})",
-            d.gates_total, term
-        )));
+        gate_lines.push(Line::from(format!("gates: {}", d.gates_total)));
     }
     if !d.promotion_state.is_empty() {
         gate_lines.push(Line::from("promotion_state:"));

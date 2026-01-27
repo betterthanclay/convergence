@@ -48,7 +48,6 @@ fn configure_gate_graph(base_url: &str, token: &str) -> Result<()> {
         .header(reqwest::header::AUTHORIZATION, common::auth_header(token))
         .json(&serde_json::json!({
             "version": 1,
-            "terminal_gate": "team",
             "gates": [
                 {"id": "dev-intake", "name": "Dev Intake", "upstream": [], "allow_superpositions": false},
                 {"id": "team", "name": "Team", "upstream": ["dev-intake"], "allow_superpositions": false}

@@ -1010,7 +1010,6 @@ pub(super) fn remote_status_lines(ws: &Workspace, ctx: &RenderCtx) -> Result<Vec
 pub(super) struct DashboardData {
     pub(super) healthz: Option<String>,
     pub(super) gates_total: usize,
-    pub(super) terminal_gate: Option<String>,
 
     pub(super) inbox_total: usize,
     pub(super) inbox_pending: usize,
@@ -1048,7 +1047,6 @@ pub(super) fn dashboard_data(ws: &Workspace, ctx: &RenderCtx) -> Result<Dashboar
     let mut out = DashboardData {
         healthz: None,
         gates_total: 0,
-        terminal_gate: None,
 
         inbox_total: 0,
         inbox_pending: 0,
@@ -1090,7 +1088,6 @@ pub(super) fn dashboard_data(ws: &Workspace, ctx: &RenderCtx) -> Result<Dashboar
     // Gates.
     if let Ok(graph) = client.get_gate_graph() {
         out.gates_total = graph.gates.len();
-        out.terminal_gate = Some(graph.terminal_gate);
     }
 
     // Inbox.

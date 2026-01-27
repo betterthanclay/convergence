@@ -89,7 +89,6 @@ fn phase3_e2e_bundle_with_conflict_blocks_promotion() -> Result<()> {
         .header(reqwest::header::AUTHORIZATION, common::auth_header(&token))
         .json(&serde_json::json!({
             "version": 1,
-            "terminal_gate": "team",
             "gates": [
                 {"id": "dev-intake", "name": "Dev Intake", "upstream": [], "allow_superpositions": false},
                 {"id": "team", "name": "Team", "upstream": ["dev-intake"], "allow_superpositions": false}
@@ -146,7 +145,6 @@ fn phase3_e2e_clean_bundle_can_be_promoted() -> Result<()> {
         .header(reqwest::header::AUTHORIZATION, common::auth_header(&token))
         .json(&serde_json::json!({
             "version": 1,
-            "terminal_gate": "team",
             "gates": [
                 {"id": "dev-intake", "name": "Dev Intake", "upstream": [], "allow_superpositions": false},
                 {"id": "team", "name": "Team", "upstream": ["dev-intake"], "allow_superpositions": false}

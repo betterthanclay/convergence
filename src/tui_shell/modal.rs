@@ -198,6 +198,8 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                             | super::TextInputAction::MemberRole
                             | super::TextInputAction::BrowseFilter
                             | super::TextInputAction::BrowseLimit
+                            | super::TextInputAction::GateGraphAddGateUpstream
+                            | super::TextInputAction::GateGraphEditUpstream
                     );
                     if raw.is_empty() && !allow_empty {
                         m.lines.retain(|l| !l.starts_with("error:"));
@@ -259,6 +261,11 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                         | super::TextInputAction::BootstrapRepo
                         | super::TextInputAction::BootstrapScope
                         | super::TextInputAction::BootstrapGate
+                        | super::TextInputAction::GateGraphAddGateId
+                        | super::TextInputAction::GateGraphAddGateName
+                        | super::TextInputAction::GateGraphAddGateUpstream
+                        | super::TextInputAction::GateGraphEditUpstream
+                        | super::TextInputAction::GateGraphSetApprovals
                         | super::TextInputAction::PublishStart
                         | super::TextInputAction::PromoteToGate
                         | super::TextInputAction::PromoteBundleId

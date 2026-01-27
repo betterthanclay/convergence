@@ -126,7 +126,6 @@ struct Gate {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct GateGraph {
     version: u32,
-    terminal_gate: String,
     gates: Vec<GateDef>,
 }
 
@@ -135,6 +134,9 @@ struct GateDef {
     id: String,
     name: String,
     upstream: Vec<String>,
+
+    #[serde(default = "default_true")]
+    allow_releases: bool,
 
     #[serde(default)]
     allow_superpositions: bool,
@@ -994,11 +996,11 @@ async fn create_repo(
 
     let gate_graph = GateGraph {
         version: 1,
-        terminal_gate: "dev-intake".to_string(),
         gates: vec![GateDef {
             id: "dev-intake".to_string(),
             name: "Dev Intake".to_string(),
             upstream: vec![],
+            allow_releases: true,
             allow_superpositions: false,
             allow_metadata_only_publications: false,
             required_approvals: 0,
@@ -1415,11 +1417,18 @@ async fn put_gate_graph(
     Path(repo_id): Path<String>,
     Json(graph): Json<GateGraph>,
 ) -> Result<Json<GateGraph>, Response> {
-    validate_gate_graph(&graph).map_err(bad_request)?;
+    let issues = validate_gate_graph_issues(&graph);
+    if !issues.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "invalid gate graph", "issues": issues})),
+        )
+            .into_response());
+    }
 
     let mut repos = state.repos.write().await;
     let repo = repos.get_mut(&repo_id).ok_or_else(not_found)?;
-    if !can_publish(repo, &subject) {
+    if !subject.admin {
         return Err(forbidden());
     }
 
@@ -3287,22 +3296,21 @@ async fn create_release(
         load_bundle_from_disk(state.as_ref(), &repo_id, &payload.bundle_id)?
     };
 
-    // Default release endpoint is the terminal gate; admins may release from non-terminal gates.
-    if bundle.gate != repo.gate_graph.terminal_gate && !subject.admin {
-        return Err(bad_request(anyhow::anyhow!(
-            "release requires terminal gate {} (bundle gate {})",
-            repo.gate_graph.terminal_gate,
-            bundle.gate
-        )));
-    }
-
-    // Re-check promotability at release time.
     let gate_def = repo
         .gate_graph
         .gates
         .iter()
         .find(|g| g.id == bundle.gate)
         .ok_or_else(|| internal_error(anyhow::anyhow!("bundle gate not found")))?;
+
+    if !gate_def.allow_releases {
+        return Err(bad_request(anyhow::anyhow!(
+            "releases disabled for gate {}",
+            bundle.gate
+        )));
+    }
+
+    // Re-check promotability at release time.
     let has_superpositions =
         manifest_has_superpositions(state.as_ref(), &repo_id, &bundle.root_manifest)?;
     let (promotable, _reasons) =
@@ -3767,11 +3775,11 @@ fn default_repo_state(state: &AppState, repo_id: &str) -> Repo {
 
     let gate_graph = GateGraph {
         version: 1,
-        terminal_gate: "dev-intake".to_string(),
         gates: vec![GateDef {
             id: "dev-intake".to_string(),
             name: "Dev Intake".to_string(),
             upstream: vec![],
+            allow_releases: true,
             allow_superpositions: false,
             allow_metadata_only_publications: false,
             required_approvals: 0,
@@ -4156,53 +4164,176 @@ fn validate_lane_id(id: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_gate_graph(graph: &GateGraph) -> Result<()> {
+#[derive(Clone, Debug, serde::Serialize)]
+struct GateGraphIssue {
+    code: String,
+    message: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gate: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    upstream: Option<String>,
+}
+
+fn validate_gate_graph_issues(graph: &GateGraph) -> Vec<GateGraphIssue> {
+    let mut issues: Vec<GateGraphIssue> = Vec::new();
+
     if graph.version != 1 {
-        return Err(anyhow::anyhow!("unsupported gate graph version"));
+        issues.push(GateGraphIssue {
+            code: "unsupported_version".to_string(),
+            message: "unsupported gate graph version".to_string(),
+            gate: None,
+            upstream: None,
+        });
+        return issues;
     }
 
     if graph.gates.is_empty() {
-        return Err(anyhow::anyhow!("gate graph must contain at least one gate"));
+        issues.push(GateGraphIssue {
+            code: "no_gates".to_string(),
+            message: "gate graph must contain at least one gate".to_string(),
+            gate: None,
+            upstream: None,
+        });
+        return issues;
     }
 
     let mut ids = HashSet::new();
     for g in &graph.gates {
-        validate_gate_id(&g.id)?;
+        if let Err(err) = validate_gate_id(&g.id) {
+            issues.push(GateGraphIssue {
+                code: "invalid_gate_id".to_string(),
+                message: err.to_string(),
+                gate: Some(g.id.clone()),
+                upstream: None,
+            });
+        }
         if g.name.trim().is_empty() {
-            return Err(anyhow::anyhow!("gate name cannot be empty"));
+            issues.push(GateGraphIssue {
+                code: "empty_gate_name".to_string(),
+                message: "gate name cannot be empty".to_string(),
+                gate: Some(g.id.clone()),
+                upstream: None,
+            });
         }
         if !ids.insert(g.id.clone()) {
-            return Err(anyhow::anyhow!("duplicate gate id {}", g.id));
+            issues.push(GateGraphIssue {
+                code: "duplicate_gate_id".to_string(),
+                message: format!("duplicate gate id {}", g.id),
+                gate: Some(g.id.clone()),
+                upstream: None,
+            });
         }
     }
 
-    validate_gate_id(&graph.terminal_gate)?;
-    if !ids.contains(&graph.terminal_gate) {
-        return Err(anyhow::anyhow!("terminal_gate does not exist"));
-    }
-
-    // Validate upstream references exist.
+    // Upstream references.
     for g in &graph.gates {
         for up in &g.upstream {
-            validate_gate_id(up)?;
+            if let Err(err) = validate_gate_id(up) {
+                issues.push(GateGraphIssue {
+                    code: "invalid_upstream_id".to_string(),
+                    message: err.to_string(),
+                    gate: Some(g.id.clone()),
+                    upstream: Some(up.clone()),
+                });
+                continue;
+            }
             if !ids.contains(up) {
-                return Err(anyhow::anyhow!(
-                    "gate {} references unknown upstream {}",
-                    g.id,
-                    up
-                ));
+                issues.push(GateGraphIssue {
+                    code: "unknown_upstream".to_string(),
+                    message: format!("gate {} references unknown upstream {}", g.id, up),
+                    gate: Some(g.id.clone()),
+                    upstream: Some(up.clone()),
+                });
             }
         }
     }
 
-    // Acyclic check via DFS.
+    // Cycle check.
+    if issues.iter().any(|i| i.code == "unknown_upstream") {
+        // Don't run DFS if upstreams are missing.
+        return issues;
+    }
     let mut visiting = HashSet::new();
     let mut visited = HashSet::new();
     for g in &graph.gates {
-        dfs_gate(g, graph, &mut visiting, &mut visited)?;
+        if let Err(err) = dfs_gate(g, graph, &mut visiting, &mut visited) {
+            issues.push(GateGraphIssue {
+                code: "cycle".to_string(),
+                message: err.to_string(),
+                gate: None,
+                upstream: None,
+            });
+            break;
+        }
     }
 
-    Ok(())
+    // Reachability from roots.
+    let roots: Vec<&GateDef> = graph
+        .gates
+        .iter()
+        .filter(|g| g.upstream.is_empty())
+        .collect();
+
+    if roots.is_empty() {
+        issues.push(GateGraphIssue {
+            code: "no_root_gate".to_string(),
+            message: "gate graph must contain at least one root gate (a gate with no upstream)"
+                .to_string(),
+            gate: None,
+            upstream: None,
+        });
+        return issues;
+    }
+
+    let mut by_id: HashMap<String, &GateDef> = HashMap::new();
+    for g in &graph.gates {
+        by_id.insert(g.id.clone(), g);
+    }
+
+    let mut downstream: HashMap<String, Vec<String>> = HashMap::new();
+    for g in &graph.gates {
+        for up in &g.upstream {
+            downstream.entry(up.clone()).or_default().push(g.id.clone());
+        }
+    }
+
+    let mut stack: Vec<String> = roots.iter().map(|g| g.id.clone()).collect();
+    let mut reachable: HashSet<String> = HashSet::new();
+    while let Some(id) = stack.pop() {
+        if !reachable.insert(id.clone()) {
+            continue;
+        }
+        if let Some(next) = downstream.get(&id) {
+            for nid in next {
+                if by_id.contains_key(nid) {
+                    stack.push(nid.clone());
+                }
+            }
+        }
+    }
+
+    if reachable.len() != graph.gates.len() {
+        let mut missing: Vec<String> = graph
+            .gates
+            .iter()
+            .map(|g| g.id.clone())
+            .filter(|id| !reachable.contains(id))
+            .collect();
+        missing.sort();
+        issues.push(GateGraphIssue {
+            code: "unreachable_gates".to_string(),
+            message: format!(
+                "unreachable gates (not reachable from any root): {}",
+                missing.join(", ")
+            ),
+            gate: None,
+            upstream: None,
+        });
+    }
+
+    issues
 }
 
 fn dfs_gate(

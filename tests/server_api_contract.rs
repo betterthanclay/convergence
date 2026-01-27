@@ -146,6 +146,145 @@ fn server_api_contract_happy_path_and_auth_failures() -> Result<()> {
         .error_for_status()
         .context("put gate graph status")?;
 
+    // Back-compat: accept legacy gate graph payloads with a terminal_gate field.
+    let mut legacy = graph.clone();
+    legacy["terminal_gate"] = serde_json::Value::String("dev-intake".to_string());
+    let updated: serde_json::Value = client
+        .put(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            common::auth_header(&server.token),
+        )
+        .json(&legacy)
+        .send()
+        .context("put legacy gate graph")?
+        .error_for_status()
+        .context("put legacy gate graph status")?
+        .json()
+        .context("parse updated gate graph")?;
+    assert!(updated.get("terminal_gate").is_none());
+
+    // Non-admin cannot change gate graph.
+    // Create a non-admin user and mint a token for them.
+    let user2: serde_json::Value = client
+        .post(format!("{}/users", server.base_url))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            common::auth_header(&server.token),
+        )
+        .json(&serde_json::json!({"handle": "alice", "admin": false}))
+        .send()
+        .context("create user")?
+        .error_for_status()
+        .context("create user status")?
+        .json()
+        .context("parse user")?;
+    let user2_id = user2
+        .get("id")
+        .and_then(|v| v.as_str())
+        .context("user id missing")?;
+
+    let token2: serde_json::Value = client
+        .post(format!("{}/users/{}/tokens", server.base_url, user2_id))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            common::auth_header(&server.token),
+        )
+        .json(&serde_json::json!({"label": "non-admin"}))
+        .send()
+        .context("create token for user")?
+        .error_for_status()
+        .context("create token for user status")?
+        .json()
+        .context("parse token")?;
+    let token2 = token2
+        .get("token")
+        .and_then(|v| v.as_str())
+        .context("token missing")?
+        .to_string();
+
+    // Try to put the graph using a non-admin token.
+    let denied = client
+        .put(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, common::auth_header(&token2))
+        .json(&graph)
+        .send()
+        .context("put gate graph non-admin")?;
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+
+    // Invalid gate graph: unknown upstream.
+    let mut bad = graph.clone();
+    let gates = bad
+        .get_mut("gates")
+        .and_then(|v| v.as_array_mut())
+        .context("bad gates")?;
+    gates.push(serde_json::json!({
+        "id": "staging",
+        "name": "Staging",
+        "upstream": ["nope"],
+        "allow_superpositions": false,
+        "allow_metadata_only_publications": false,
+        "required_approvals": 0
+    }));
+    let resp = client
+        .put(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            common::auth_header(&server.token),
+        )
+        .json(&bad)
+        .send()
+        .context("put bad upstream")?;
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let resp: serde_json::Value = resp.json().context("parse bad upstream")?;
+    assert!(
+        resp["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i.get("code")
+                == Some(&serde_json::Value::String("unknown_upstream".to_string())))
+    );
+
+    // Invalid gate graph: cycle.
+    let mut bad = graph.clone();
+    let gates = bad
+        .get_mut("gates")
+        .and_then(|v| v.as_array_mut())
+        .context("cycle gates")?;
+    // Add a second gate and make a 2-cycle.
+    gates.push(serde_json::json!({
+        "id": "staging",
+        "name": "Staging",
+        "upstream": ["dev-intake"],
+        "allow_superpositions": false,
+        "allow_metadata_only_publications": false,
+        "required_approvals": 0
+    }));
+    for g in gates.iter_mut() {
+        if g.get("id") == Some(&serde_json::Value::String("dev-intake".to_string())) {
+            g["upstream"] = serde_json::json!(["staging"]);
+        }
+    }
+    let resp = client
+        .put(format!("{}/repos/test/gate-graph", server.base_url))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            common::auth_header(&server.token),
+        )
+        .json(&bad)
+        .send()
+        .context("put cycle")?;
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let resp: serde_json::Value = resp.json().context("parse cycle")?;
+    assert!(
+        resp["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i.get("code") == Some(&serde_json::Value::String("cycle".to_string())))
+    );
+
     // Upload a manifest and snap referencing a missing blob.
     let missing_blob = "1".repeat(64);
     let manifest = converge::model::Manifest {

@@ -64,8 +64,7 @@ Semantics:
 Marks a bundle as a release in a named release channel.
 
 Semantics:
-- A release is typically cut from the terminal gate of the primary gate graph, but this is not required.
-- A repo can allow release creation from earlier gates (e.g. compatibility releases) if gate policy permits.
+- A release can be cut from any gate by default, unless that gate disables releases via policy.
 - Release creation records provenance (who released, from which bundle, under which policy).
 
 Current implementation (dev server):
@@ -80,7 +79,7 @@ Current implementation (dev server):
 - Enforcement:
   - requires publish permission
   - bundle must be promotable at release time
-  - defaults to terminal gate (non-admin releases require `bundle.gate == terminal_gate`)
+  - release is rejected if the bundle's gate has `allow_releases=false`
 
 ## `converge resolve`
 

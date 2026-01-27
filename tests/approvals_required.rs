@@ -67,7 +67,6 @@ fn approvals_make_bundle_promotable() -> Result<()> {
         .header(reqwest::header::AUTHORIZATION, common::auth_header(&token))
         .json(&serde_json::json!({
             "version": 1,
-            "terminal_gate": "dev-intake",
             "gates": [
                 {"id": "dev-intake", "name": "Dev Intake", "upstream": [], "allow_superpositions": false, "required_approvals": 1}
             ]

@@ -21,7 +21,8 @@ converge release list
 ```
 
 Notes:
-- Non-admin users can only create releases from the terminal gate (per repo gate graph).
+- Releases can be created from any gate by default.
+- A gate can disable release creation via its policy (`allow_releases=false`).
 
 ### Create a release (TUI)
 
