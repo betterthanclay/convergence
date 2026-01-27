@@ -39,8 +39,9 @@ use super::views::{
     SettingsSnapshot, SettingsView, SnapsView, SuperpositionsView,
 };
 use super::wizard::{
-    BrowseTarget, BrowseWizard, FetchWizard, LaneMemberWizard, LoginWizard, MemberAction,
-    MemberWizard, MoveWizard, PinWizard, PromoteWizard, PublishWizard, ReleaseWizard, SyncWizard,
+    BootstrapWizard, BrowseTarget, BrowseWizard, FetchWizard, LaneMemberWizard, LoginWizard,
+    MemberAction, MemberWizard, MoveWizard, PinWizard, PromoteWizard, PublishWizard, ReleaseWizard,
+    SyncWizard,
 };
 
 pub(super) fn run() -> Result<()> {
@@ -230,6 +231,14 @@ pub(super) enum TextInputAction {
 
     MoveFrom,
     MoveTo,
+
+    BootstrapUrl,
+    BootstrapToken,
+    BootstrapHandle,
+    BootstrapDisplayName,
+    BootstrapRepo,
+    BootstrapScope,
+    BootstrapGate,
 
     BrowseScope,
     BrowseGate,
@@ -493,6 +502,7 @@ pub(super) struct App {
     pub(super) lane_member_wizard: Option<LaneMemberWizard>,
     pub(super) browse_wizard: Option<BrowseWizard>,
     pub(super) move_wizard: Option<MoveWizard>,
+    pub(super) bootstrap_wizard: Option<BootstrapWizard>,
 
     input: Input,
 
@@ -537,6 +547,7 @@ impl Default for App {
             lane_member_wizard: None,
             browse_wizard: None,
             move_wizard: None,
+            bootstrap_wizard: None,
             input: Input::default(),
             suggestions: Vec::new(),
             suggestion_selected: 0,
@@ -582,7 +593,11 @@ impl App {
             && (!self.remote_configured || self.remote_identity.is_none())
         {
             defs.retain(|d| {
-                d.name == "login" || d.name == "help" || d.name == "quit" || d.name == "clear"
+                d.name == "login"
+                    || d.name == "bootstrap"
+                    || d.name == "help"
+                    || d.name == "quit"
+                    || d.name == "clear"
             });
         }
 
@@ -665,7 +680,7 @@ impl App {
                 }
                 RootContext::Remote => {
                     if !self.remote_configured || self.remote_identity.is_none() {
-                        vec!["login".to_string()]
+                        vec!["login".to_string(), "bootstrap".to_string()]
                     } else {
                         vec!["inbox".to_string(), "releases".to_string()]
                     }
@@ -1398,9 +1413,9 @@ impl App {
                     self.quit = true;
                 }
 
-                "remote" | "ping" | "fetch" | "lanes" | "members" | "member" | "lane-member"
-                | "inbox" | "bundles" | "bundle" | "pins" | "pin" | "approve" | "promote"
-                | "release" | "superpositions" | "supers" => {
+                "bootstrap" | "remote" | "ping" | "fetch" | "lanes" | "members" | "member"
+                | "lane-member" | "inbox" | "bundles" | "bundle" | "pins" | "pin" | "approve"
+                | "promote" | "release" | "superpositions" | "supers" => {
                     self.push_error("remote command; press Tab to switch to remote".to_string());
                 }
 
@@ -1412,6 +1427,7 @@ impl App {
             },
             RootContext::Remote => match cmd {
                 "status" => self.cmd_status(args),
+                "bootstrap" => self.cmd_bootstrap(args),
                 "refresh" | "r" => {
                     let _ = args;
                     self.refresh_root_view();
@@ -3320,6 +3336,17 @@ impl App {
         self.refresh_root_view();
     }
 
+    fn cmd_bootstrap(&mut self, args: &[String]) {
+        let Some(_) = self.require_workspace() else {
+            return;
+        };
+        if !args.is_empty() {
+            self.push_error("usage: bootstrap".to_string());
+            return;
+        }
+        self.start_bootstrap_wizard();
+    }
+
     fn cmd_login(&mut self, args: &[String]) {
         let Some(_) = self.require_workspace() else {
             return;
@@ -3856,6 +3883,16 @@ impl App {
 
             TextInputAction::MoveFrom | TextInputAction::MoveTo => {
                 self.continue_move_wizard(action, value);
+            }
+
+            TextInputAction::BootstrapUrl
+            | TextInputAction::BootstrapToken
+            | TextInputAction::BootstrapHandle
+            | TextInputAction::BootstrapDisplayName
+            | TextInputAction::BootstrapRepo
+            | TextInputAction::BootstrapScope
+            | TextInputAction::BootstrapGate => {
+                self.continue_bootstrap_wizard(action, value);
             }
         }
     }

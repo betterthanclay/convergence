@@ -17,6 +17,18 @@ pub(super) struct LoginWizard {
     pub(super) gate: String,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct BootstrapWizard {
+    pub(super) url: Option<String>,
+    pub(super) bootstrap_token: Option<String>,
+    pub(super) handle: String,
+    pub(super) display_name: Option<String>,
+
+    pub(super) repo: Option<String>,
+    pub(super) scope: String,
+    pub(super) gate: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FetchKind {
     Snap,
@@ -111,6 +123,7 @@ pub(super) struct MoveWizard {
 impl super::App {
     pub(super) fn cancel_wizards(&mut self) {
         self.login_wizard = None;
+        self.bootstrap_wizard = None;
         self.fetch_wizard = None;
         self.publish_wizard = None;
         self.sync_wizard = None;
@@ -152,6 +165,213 @@ impl super::App {
             TextInputAction::MoveFrom => self.move_wizard_from(value),
             TextInputAction::MoveTo => self.move_wizard_to(value),
             _ => self.push_error("unexpected move wizard input".to_string()),
+        }
+    }
+
+    pub(super) fn start_bootstrap_wizard(&mut self) {
+        let Some(ws) = self.require_workspace() else {
+            return;
+        };
+
+        let remote = ws.store.read_config().ok().and_then(|c| c.remote);
+
+        let default_url = remote
+            .as_ref()
+            .map(|r| r.base_url.clone())
+            .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
+        let default_repo = remote
+            .as_ref()
+            .map(|r| r.repo_id.clone())
+            .unwrap_or_else(|| "test".to_string());
+        let default_scope = remote
+            .as_ref()
+            .map(|r| r.scope.clone())
+            .unwrap_or_else(|| "main".to_string());
+        let default_gate = remote
+            .as_ref()
+            .map(|r| r.gate.clone())
+            .unwrap_or_else(|| "dev-intake".to_string());
+
+        self.bootstrap_wizard = Some(BootstrapWizard {
+            url: Some(default_url.clone()),
+            bootstrap_token: None,
+            handle: "admin".to_string(),
+            display_name: None,
+            repo: Some(default_repo),
+            scope: default_scope,
+            gate: default_gate,
+        });
+
+        self.open_text_input_modal(
+            "Bootstrap",
+            "url> ",
+            TextInputAction::BootstrapUrl,
+            Some(default_url),
+            vec![
+                "Server base URL (example: http://127.0.0.1:8080)".to_string(),
+                "Start converge-server with --bootstrap-token first.".to_string(),
+            ],
+        );
+    }
+
+    pub(super) fn continue_bootstrap_wizard(&mut self, action: TextInputAction, value: String) {
+        if self.bootstrap_wizard.is_none() {
+            self.push_error("bootstrap wizard not active".to_string());
+            return;
+        }
+
+        match action {
+            TextInputAction::BootstrapUrl => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing url".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.url = Some(v);
+                }
+                let default = self
+                    .bootstrap_wizard
+                    .as_ref()
+                    .and_then(|w| w.repo.clone())
+                    .unwrap_or_else(|| "test".to_string());
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "repo> ",
+                    TextInputAction::BootstrapRepo,
+                    Some(default),
+                    vec![
+                        "Repo id to use for the client config.".to_string(),
+                        "If it doesn't exist, the wizard will create it.".to_string(),
+                    ],
+                );
+            }
+
+            TextInputAction::BootstrapRepo => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing repo".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.repo = Some(v);
+                }
+                let default = self
+                    .bootstrap_wizard
+                    .as_ref()
+                    .map(|w| w.scope.clone())
+                    .unwrap_or_else(|| "main".to_string());
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "scope> ",
+                    TextInputAction::BootstrapScope,
+                    Some(default),
+                    vec!["Default scope for remote operations.".to_string()],
+                );
+            }
+
+            TextInputAction::BootstrapScope => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing scope".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.scope = v;
+                }
+                let default = self
+                    .bootstrap_wizard
+                    .as_ref()
+                    .map(|w| w.gate.clone())
+                    .unwrap_or_else(|| "dev-intake".to_string());
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "gate> ",
+                    TextInputAction::BootstrapGate,
+                    Some(default),
+                    vec!["Default gate for remote operations.".to_string()],
+                );
+            }
+
+            TextInputAction::BootstrapGate => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing gate".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.gate = v;
+                }
+
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "bootstrap token> ",
+                    TextInputAction::BootstrapToken,
+                    None,
+                    vec![
+                        "One-time bootstrap token (the same value passed to converge-server --bootstrap-token)."
+                            .to_string(),
+                        "Generate one: openssl rand -hex 32".to_string(),
+                    ],
+                );
+            }
+
+            TextInputAction::BootstrapToken => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing token".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.bootstrap_token = Some(v);
+                }
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "admin handle> ",
+                    TextInputAction::BootstrapHandle,
+                    Some("admin".to_string()),
+                    vec![
+                        "Admin handle to create (one-time).".to_string(),
+                        "Response includes a plaintext admin token; it will be stored in .converge/state.json".to_string(),
+                    ],
+                );
+            }
+
+            TextInputAction::BootstrapHandle => {
+                let v = value.trim().to_string();
+                if v.is_empty() {
+                    self.push_error("bootstrap: missing handle".to_string());
+                    self.bootstrap_wizard = None;
+                    return;
+                }
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    w.handle = v;
+                }
+                self.open_text_input_modal(
+                    "Bootstrap",
+                    "display name (optional)> ",
+                    TextInputAction::BootstrapDisplayName,
+                    None,
+                    vec!["Optional display name (leave blank to skip).".to_string()],
+                );
+            }
+
+            TextInputAction::BootstrapDisplayName => {
+                if let Some(w) = self.bootstrap_wizard.as_mut() {
+                    let v = value.trim().to_string();
+                    w.display_name = if v.is_empty() { None } else { Some(v) };
+                }
+                self.finish_bootstrap_wizard();
+            }
+
+            _ => {
+                self.push_error("unexpected bootstrap wizard input".to_string());
+            }
         }
     }
 
@@ -344,6 +564,88 @@ impl super::App {
         }
 
         self.push_output(vec![format!("logged in to {}", base_url)]);
+        self.refresh_root_view();
+    }
+
+    pub(super) fn finish_bootstrap_wizard(&mut self) {
+        let Some(w) = self.bootstrap_wizard.clone() else {
+            self.push_error("bootstrap wizard not active".to_string());
+            return;
+        };
+        self.bootstrap_wizard = None;
+
+        let Some(base_url) = w.url.clone() else {
+            self.push_error("bootstrap: missing url".to_string());
+            return;
+        };
+        let Some(bootstrap_token) = w.bootstrap_token.clone() else {
+            self.push_error("bootstrap: missing token".to_string());
+            return;
+        };
+        let handle = w.handle.trim().to_string();
+        if handle.is_empty() {
+            self.push_error("bootstrap: missing handle".to_string());
+            return;
+        }
+        let Some(repo_id) = w.repo.clone() else {
+            self.push_error("bootstrap: missing repo".to_string());
+            return;
+        };
+
+        let remote = RemoteConfig {
+            base_url: base_url.clone(),
+            token: None,
+            repo_id: repo_id.clone(),
+            scope: w.scope.clone(),
+            gate: w.gate.clone(),
+        };
+
+        let client = match crate::remote::RemoteClient::new(remote.clone(), bootstrap_token) {
+            Ok(c) => c,
+            Err(err) => {
+                self.push_error(format!("bootstrap: {:#}", err));
+                return;
+            }
+        };
+
+        let bootstrap = match client.bootstrap_first_admin(&handle, w.display_name.clone()) {
+            Ok(r) => r,
+            Err(err) => {
+                self.push_error(format!("bootstrap: {:#}", err));
+                return;
+            }
+        };
+
+        self.apply_login_config(
+            base_url.clone(),
+            bootstrap.token.token.clone(),
+            repo_id.clone(),
+            w.scope.clone(),
+            w.gate.clone(),
+        );
+
+        // Ensure the repo exists for the configured remote (best-effort).
+        if let Some(client) = self.remote_client() {
+            match client.get_repo(&repo_id) {
+                Ok(_) => {
+                    self.push_output(vec![format!("repo {} exists", repo_id)]);
+                }
+                Err(err) if err.to_string().contains("remote repo not found") => {
+                    match client.create_repo(&repo_id) {
+                        Ok(_) => self.push_output(vec![format!("created repo {}", repo_id)]),
+                        Err(err) => self.push_error(format!("create repo: {:#}", err)),
+                    }
+                }
+                Err(err) => {
+                    self.push_error(format!("get repo: {:#}", err));
+                }
+            }
+        }
+
+        self.push_output(vec![
+            format!("bootstrapped admin {}", bootstrap.user.handle),
+            "Restart the server without --bootstrap-token.".to_string(),
+        ]);
         self.refresh_root_view();
     }
 

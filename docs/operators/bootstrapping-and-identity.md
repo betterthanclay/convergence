@@ -40,6 +40,12 @@ curl -sS -X POST http://127.0.0.1:8080/bootstrap \
 
 The response contains `token.token` (the plaintext admin token). Save it somewhere safe.
 
+TUI option (same flow):
+
+1) Start the server with `--bootstrap-token` as above.
+2) In a workspace terminal, run `converge` (TUI), press `Tab` to switch to remote, then run `/bootstrap`.
+3) The wizard stores the returned admin token in `.converge/state.json` and writes `.converge/config.json` remote config.
+
 3) Restart the server without `--bootstrap-token`.
 
 ## Managing users and tokens (admin)

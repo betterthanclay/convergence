@@ -125,6 +125,12 @@ pub(super) fn remote_root_command_defs() -> Vec<CommandDef> {
     out.extend(auth_command_defs());
     out.extend(vec![
         CommandDef {
+            name: "bootstrap",
+            aliases: &[],
+            usage: "bootstrap",
+            help: "Bootstrap first admin (guided)",
+        },
+        CommandDef {
             name: "status",
             aliases: &["st"],
             usage: "status",

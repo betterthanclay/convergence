@@ -179,6 +179,7 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                         action,
                         super::TextInputAction::LoginScope
                             | super::TextInputAction::LoginGate
+                            | super::TextInputAction::BootstrapDisplayName
                             | super::TextInputAction::FetchId
                             | super::TextInputAction::FetchUser
                             | super::TextInputAction::FetchOptions
@@ -251,6 +252,13 @@ pub(super) fn handle_modal_key(app: &mut super::App, key: KeyEvent) {
                         | super::TextInputAction::FetchOptions
                         | super::TextInputAction::MoveFrom
                         | super::TextInputAction::MoveTo
+                        | super::TextInputAction::BootstrapUrl
+                        | super::TextInputAction::BootstrapToken
+                        | super::TextInputAction::BootstrapHandle
+                        | super::TextInputAction::BootstrapDisplayName
+                        | super::TextInputAction::BootstrapRepo
+                        | super::TextInputAction::BootstrapScope
+                        | super::TextInputAction::BootstrapGate
                         | super::TextInputAction::PublishStart
                         | super::TextInputAction::PromoteToGate
                         | super::TextInputAction::PromoteBundleId
