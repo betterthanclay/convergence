@@ -65,6 +65,7 @@ mod remote_action_parse;
 mod remote_fetch_parse;
 mod remote_list_views;
 mod remote_members;
+mod remote_mutations;
 mod remote_scope_query_parse;
 mod remote_superpositions;
 mod render;
