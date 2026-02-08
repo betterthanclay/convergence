@@ -63,6 +63,7 @@ Progress notes:
 - Reduced `src/tui_shell/app.rs` to focused orchestration/state (currently ~970 LOC).
 - Started `src/main.rs` decomposition with `src/cli_exec.rs` and moved `remote` + `gates` + `token` + `user` + `members` + `lane` command execution branches behind module-level handlers.
 - Continued `src/main.rs` decomposition by moving `release` and `resolve` command execution branches into `src/cli_exec.rs`.
+- Continued `src/main.rs` decomposition by moving `approve`, `pins`, `pin`, and `status` command execution branches into `src/cli_exec.rs`.
 
 Module conventions (applied in `src/tui_shell/app/*`):
 - `cmd_*`: command handlers grouped by domain or interaction surface.
