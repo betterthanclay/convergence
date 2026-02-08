@@ -57,6 +57,7 @@ Progress notes:
 - Continued `wizard.rs` decomposition by extracting wizard DTO/enums into `src/tui_shell/wizard/types.rs`; `wizard.rs` now acts more as behavior/orchestration over typed wizard state.
 - Continued `wizard.rs` decomposition by extracting move-flow state transitions (`move_wizard_from` / `move_wizard_to`) into `src/tui_shell/wizard/move_flow.rs`.
 - Continued `wizard.rs` decomposition by extracting fetch-flow transitions (`start_fetch_wizard` / `continue_fetch_wizard` / `finish_fetch_wizard`) into `src/tui_shell/wizard/fetch_flow.rs`.
+- Continued `wizard.rs` decomposition by extracting browse-flow transitions (`start_browse_wizard` / `continue_browse_wizard` / `finish_browse_wizard`) into `src/tui_shell/wizard/browse_flow.rs`.
 
 ### C) Core Workspace/Store Decomposition
 
