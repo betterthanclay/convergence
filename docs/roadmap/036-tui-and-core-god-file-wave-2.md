@@ -81,6 +81,7 @@ Progress notes:
 
 Progress notes:
 - Started `store.rs` decomposition by extracting object traversal/query helpers (`list_blob_ids`, `list_manifest_ids`, `list_recipe_ids`, `delete_blob`, `delete_manifest`, `delete_recipe`) into `src/store/traversal.rs`.
+- Continued `store.rs` decomposition by extracting workspace-state metadata helpers (lane sync, remote token, last published scope/gate metadata) into `src/store/state_meta.rs`.
 
 ### D) Regression and Verification
 
