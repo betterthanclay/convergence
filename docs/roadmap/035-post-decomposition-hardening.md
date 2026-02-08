@@ -32,7 +32,7 @@ Progress notes:
 ### B) Regression Coverage
 
 - [ ] Add focused tests for remote module composition boundaries (identity/operations/transfer/fetch) where current coverage is indirect.
-- [ ] Add a smoke test for CLI command surface/help output stability.
+- [x] Add a smoke test for CLI command surface/help output stability.
 - [ ] Add a server routing smoke test to ensure extracted route registration still wires expected endpoints.
 
 ### C) Consistency Cleanup
