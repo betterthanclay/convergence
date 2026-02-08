@@ -7,18 +7,17 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use crate::workspace::Workspace;
 
 use super::super::app::{now_ts, root_ctx_color};
-use super::super::status::{
-    ChangeSummary, DashboardData, collapse_blank_lines, dashboard_data, extract_baseline_compact,
-    extract_change_keys, extract_change_summary, jaccard_similarity, local_status_lines,
-};
+use super::super::status::{ChangeSummary, DashboardData, dashboard_data, local_status_lines};
 use super::super::view::render_view_chrome_with_header;
 use super::super::{RenderCtx, RootContext, UiMode, View, fmt_ts_ui};
 
 mod local_header;
+mod refresh_local;
 mod render_remote;
 mod style_line;
 
 use self::local_header::local_header_and_baseline_line;
+use self::refresh_local::{clear_local_tracking_for_remote, refresh_local_state};
 use self::render_remote::render_remote_dashboard;
 use self::style_line::style_root_line;
 
@@ -86,49 +85,9 @@ impl RootView {
         };
 
         if self.ctx == RootContext::Local {
-            let (summary, lines) = extract_change_summary(lines);
-            self.change_summary = summary;
-            self.baseline_compact = extract_baseline_compact(&lines);
-
-            let new_lines = collapse_blank_lines(lines);
-            let new_keys = extract_change_keys(&new_lines);
-            self.change_keys = new_keys.clone();
-
-            // Preserve scroll position unless the change list shifts substantially.
-            let significant = {
-                if prev_baseline != self.baseline_compact {
-                    true
-                } else {
-                    let old_count = prev_keys.len();
-                    let new_count = new_keys.len();
-                    if old_count >= 10 && new_count >= 10 {
-                        let jac = jaccard_similarity(&prev_keys, &new_keys);
-                        jac < 0.40
-                    } else {
-                        // For small lists, treat size spikes as significant.
-                        let delta = old_count.abs_diff(new_count);
-                        delta >= 25 && (delta as f64) / ((old_count.max(new_count)) as f64) > 0.50
-                    }
-                }
-            };
-
-            let new_len = new_lines.len();
-            let max_scroll = new_len.saturating_sub(1);
-            if significant && self.scroll > 0 {
-                self.scroll = 0;
-            } else if prev_lines_len > 0 && new_len > 0 {
-                self.scroll = self.scroll.min(max_scroll);
-            } else {
-                self.scroll = 0;
-            }
-
-            self.lines = new_lines;
+            refresh_local_state(self, lines, prev_lines_len, prev_baseline, prev_keys);
         } else {
-            self.change_summary = ChangeSummary::default();
-            self.baseline_compact = None;
-            self.change_keys.clear();
-            self.lines = lines;
-            self.scroll = 0;
+            clear_local_tracking_for_remote(self, lines);
         }
         self.updated_at = now_ts();
     }

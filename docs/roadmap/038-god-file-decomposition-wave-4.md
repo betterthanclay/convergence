@@ -63,6 +63,8 @@ Progress notes:
   - `src/tui_shell/views/root/style_line.rs`
 - Continued `views/root.rs` decomposition by extracting local header/baseline rendering heuristics into:
   - `src/tui_shell/views/root/local_header.rs`
+- Continued `views/root.rs` decomposition by extracting local refresh state updates and significance heuristics into:
+  - `src/tui_shell/views/root/refresh_local.rs`
 
 ### C) TUI App Surface Decomposition
 
