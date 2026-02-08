@@ -79,6 +79,7 @@ Progress notes:
 - Started `src/bin/converge-server.rs` split with `src/bin/converge_server/persistence.rs` for repo/state load + persist helpers (no route behavior changes).
 - Continued `src/bin/converge-server.rs` split with `src/bin/converge_server/identity_store.rs` for identity timestamp/token/hash/load/persist helpers.
 - Continued `src/bin/converge-server.rs` split with `src/bin/converge_server/validators.rs` for shared id/channel/object validation helpers.
+- Continued `src/bin/converge-server.rs` split with `src/bin/converge_server/handlers_identity.rs` for identity/user/token HTTP handlers and related request/response DTOs.
 
 Module conventions (applied in `src/tui_shell/app/*`):
 - `cmd_*`: command handlers grouped by domain or interaction surface.
