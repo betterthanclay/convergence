@@ -71,6 +71,7 @@ mod remote_superpositions;
 mod render;
 mod root_context;
 mod root_refresh;
+mod settings_overview;
 mod superpositions_nav;
 mod time_utils;
 mod view_nav;
