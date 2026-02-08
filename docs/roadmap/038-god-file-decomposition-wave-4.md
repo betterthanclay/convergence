@@ -49,8 +49,8 @@ Progress notes:
 ### B) TUI Wizard and View Decomposition
 
 - [x] Split `src/tui_shell/wizard/login_bootstrap_flow.rs` into focused stages (state transitions, validation, and effect execution).
-- [ ] Split `src/tui_shell/views/root.rs` into view-model assembly, layout selection, and section rendering helpers.
-- [ ] Keep top-level wizard/view modules as orchestration-only entry points.
+- [x] Split `src/tui_shell/views/root.rs` into view-model assembly, layout selection, and section rendering helpers.
+- [x] Keep top-level wizard/view modules as orchestration-only entry points.
 
 Progress notes:
 - Started `login_bootstrap_flow.rs` decomposition by extracting validation parsing helpers into `src/tui_shell/wizard/login_bootstrap_validate.rs` and wiring the flow to use them.
@@ -69,10 +69,14 @@ Progress notes:
 ### C) TUI App Surface Decomposition
 
 - [ ] Split `src/tui_shell/app.rs` into app state construction, mode switching, and event-loop dispatch helpers.
-- [ ] Split `src/tui_shell/app/cmd_dispatch.rs` into grouped command routing modules by domain.
+- [x] Split `src/tui_shell/app/cmd_dispatch.rs` into grouped command routing modules by domain.
 - [x] Split `src/tui_shell/modal.rs` into modal state transitions and rendering helpers.
 
 Progress notes:
+- Completed `cmd_dispatch.rs` decomposition into grouped modules:
+  - `src/tui_shell/app/cmd_dispatch/root_dispatch.rs`
+  - `src/tui_shell/app/cmd_dispatch/mode_dispatch.rs`
+  with `src/tui_shell/app/cmd_dispatch/mod.rs` keeping suggestion/palette orchestration and top-level dispatch flow.
 - Completed `modal.rs` decomposition into focused modules:
   - `src/tui_shell/modal/draw.rs` (rendering/layout/cursor)
   - `src/tui_shell/modal/keymap.rs` (key-to-action mapping and modal input edits)
