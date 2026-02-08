@@ -90,6 +90,7 @@ Progress notes:
 - Completed `cmd_remote_actions.rs` decomposition by extracting bundle/pins handlers into `src/tui_shell/app/remote_bundle_ops.rs` and removing the legacy `cmd_remote_actions.rs` file.
 - Started `cmd_settings.rs` decomposition by extracting settings snapshot/open/refresh helpers into `src/tui_shell/app/settings_overview.rs`.
 - Continued `cmd_settings.rs` decomposition by extracting `cmd_chunking` and `cmd_retention` into `src/tui_shell/app/settings_chunking.rs` and `src/tui_shell/app/settings_retention.rs`.
+- Completed `cmd_settings.rs` decomposition by extracting settings mode action handling into `src/tui_shell/app/settings_do_mode.rs` and removing the legacy `cmd_settings.rs` file.
 - Started `workspace.rs` decomposition by extracting GC reachability traversal helpers into `src/workspace/gc.rs` and wiring `workspace.rs` through module imports.
 - Continued `workspace.rs` decomposition by extracting restore/materialization filesystem helpers into `src/workspace/materialize_fs.rs`.
 - Continued `workspace.rs` decomposition by extracting chunking policy constants/type/config parsing into `src/workspace/chunking.rs`.
