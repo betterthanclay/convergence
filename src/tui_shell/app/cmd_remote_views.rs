@@ -1,4 +1,5 @@
 use super::remote_fetch_parse::parse_fetch_spec;
+use super::remote_scope_query_parse::parse_scope_query_args;
 use super::*;
 
 impl App {
@@ -238,63 +239,17 @@ impl App {
             }
         };
 
-        let mut scope: Option<String> = None;
-        let mut gate: Option<String> = None;
-        let mut limit: Option<usize> = None;
-        let mut filter: Option<String> = None;
-
-        let mut i = 0;
-        while i < args.len() {
-            match args[i].as_str() {
-                "--scope" | "scope" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --scope".to_string());
-                        return;
-                    }
-                    scope = Some(args[i].clone());
-                }
-                "--gate" | "gate" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --gate".to_string());
-                        return;
-                    }
-                    gate = Some(args[i].clone());
-                }
-                "--limit" | "limit" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --limit".to_string());
-                        return;
-                    }
-                    limit = match args[i].parse::<usize>() {
-                        Ok(n) => Some(n),
-                        Err(_) => {
-                            self.push_error("invalid --limit".to_string());
-                            return;
-                        }
-                    };
-                }
-                "--filter" | "filter" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --filter".to_string());
-                        return;
-                    }
-                    filter = Some(args[i].clone());
-                }
-                a => {
-                    self.push_error(format!("unknown arg: {}", a));
-                    return;
-                }
+        let parsed = match parse_scope_query_args(args) {
+            Ok(v) => v,
+            Err(msg) => {
+                self.push_error(msg);
+                return;
             }
-            i += 1;
-        }
+        };
 
-        let scope = scope.unwrap_or(cfg.scope);
-        let gate = gate.unwrap_or(cfg.gate);
-        self.open_inbox_view(scope, gate, filter, limit);
+        let scope = parsed.scope.unwrap_or(cfg.scope);
+        let gate = parsed.gate.unwrap_or(cfg.gate);
+        self.open_inbox_view(scope, gate, parsed.filter, parsed.limit);
     }
 
     pub(super) fn cmd_bundles(&mut self, args: &[String]) {
@@ -311,62 +266,16 @@ impl App {
             }
         };
 
-        let mut scope: Option<String> = None;
-        let mut gate: Option<String> = None;
-        let mut limit: Option<usize> = None;
-        let mut filter: Option<String> = None;
-
-        let mut i = 0;
-        while i < args.len() {
-            match args[i].as_str() {
-                "--scope" | "scope" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --scope".to_string());
-                        return;
-                    }
-                    scope = Some(args[i].clone());
-                }
-                "--gate" | "gate" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --gate".to_string());
-                        return;
-                    }
-                    gate = Some(args[i].clone());
-                }
-                "--limit" | "limit" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --limit".to_string());
-                        return;
-                    }
-                    limit = match args[i].parse::<usize>() {
-                        Ok(n) => Some(n),
-                        Err(_) => {
-                            self.push_error("invalid --limit".to_string());
-                            return;
-                        }
-                    };
-                }
-                "--filter" | "filter" => {
-                    i += 1;
-                    if i >= args.len() {
-                        self.push_error("missing value for --filter".to_string());
-                        return;
-                    }
-                    filter = Some(args[i].clone());
-                }
-                a => {
-                    self.push_error(format!("unknown arg: {}", a));
-                    return;
-                }
+        let parsed = match parse_scope_query_args(args) {
+            Ok(v) => v,
+            Err(msg) => {
+                self.push_error(msg);
+                return;
             }
-            i += 1;
-        }
+        };
 
-        let scope = scope.unwrap_or(cfg.scope);
-        let gate = gate.unwrap_or(cfg.gate);
-        self.open_bundles_view(scope, gate, filter, limit);
+        let scope = parsed.scope.unwrap_or(cfg.scope);
+        let gate = parsed.gate.unwrap_or(cfg.gate);
+        self.open_bundles_view(scope, gate, parsed.filter, parsed.limit);
     }
 }

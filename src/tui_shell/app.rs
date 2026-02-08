@@ -60,6 +60,7 @@ mod parse_utils;
 mod remote_fetch_parse;
 mod remote_list_views;
 mod remote_members;
+mod remote_scope_query_parse;
 mod render;
 mod root_context;
 mod root_refresh;
