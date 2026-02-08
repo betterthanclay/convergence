@@ -6,16 +6,16 @@ use crate::store::LocalStore;
 use super::Workspace;
 
 #[derive(Clone, Debug, Default)]
-pub struct GcReport {
-    pub kept_snaps: usize,
-    pub pruned_snaps: usize,
-    pub deleted_blobs: usize,
-    pub deleted_manifests: usize,
-    pub deleted_recipes: usize,
+pub(crate) struct GcReport {
+    pub(crate) kept_snaps: usize,
+    pub(crate) pruned_snaps: usize,
+    pub(crate) deleted_blobs: usize,
+    pub(crate) deleted_manifests: usize,
+    pub(crate) deleted_recipes: usize,
 }
 
 impl Workspace {
-    pub fn gc_local(&self, dry_run: bool) -> Result<GcReport> {
+    pub(crate) fn gc_local(&self, dry_run: bool) -> Result<GcReport> {
         let cfg = self.store.read_config()?;
         let retention = cfg.retention.unwrap_or_default();
 

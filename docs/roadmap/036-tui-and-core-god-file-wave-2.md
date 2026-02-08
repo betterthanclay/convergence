@@ -48,9 +48,9 @@ Progress notes:
 
 ### B) TUI Wizard/Status Decomposition
 
-- [ ] Split `src/tui_shell/wizard.rs` into focused modules (state model, rendering, input transitions, command execution bridge).
-- [ ] Split `src/tui_shell/status.rs` into focused modules (snapshot modeling, diff analysis, formatting/presentation helpers).
-- [ ] Keep top-level files as thin composition/entry modules.
+- [x] Split `src/tui_shell/wizard.rs` into focused modules (state model, rendering, input transitions, command execution bridge).
+- [x] Split `src/tui_shell/status.rs` into focused modules (snapshot modeling, diff analysis, formatting/presentation helpers).
+- [x] Keep top-level files as thin composition/entry modules.
 
 Progress notes:
 - Started `wizard.rs` decomposition by extracting filesystem glob/path search helpers into `src/tui_shell/wizard/move_glob.rs`; `wizard.rs` now imports `move_glob::glob_search` instead of owning low-level file-walk logic.
@@ -92,6 +92,7 @@ Progress notes:
 - Continued `cmd_settings.rs` decomposition by extracting `cmd_chunking` and `cmd_retention` into `src/tui_shell/app/settings_chunking.rs` and `src/tui_shell/app/settings_retention.rs`.
 - Completed `cmd_settings.rs` decomposition by extracting settings mode action handling into `src/tui_shell/app/settings_do_mode.rs` and removing the legacy `cmd_settings.rs` file.
 - Continued `cmd_remote_views.rs` decomposition by extracting lanes/releases view loaders into `src/tui_shell/app/remote_lane_release_views.rs`.
+- Completed `cmd_remote_views.rs` decomposition by extracting fetch execution orchestration and bundle/release/snap fetch handlers into `src/tui_shell/app/remote_fetch_exec.rs`, leaving `cmd_remote_views.rs` as entry-level fetch/inbox/bundles dispatch.
 - Started `workspace.rs` decomposition by extracting GC reachability traversal helpers into `src/workspace/gc.rs` and wiring `workspace.rs` through module imports.
 - Continued `workspace.rs` decomposition by extracting restore/materialization filesystem helpers into `src/workspace/materialize_fs.rs`.
 - Continued `workspace.rs` decomposition by extracting chunking policy constants/type/config parsing into `src/workspace/chunking.rs`.
@@ -101,7 +102,7 @@ Progress notes:
 
 - [x] Split `src/workspace.rs` into modules for workspace lifecycle, snap creation, restore/diff orchestration, and metadata helpers.
 - [x] Split `src/store.rs` into modules for object CRUD, integrity checks, and traversal/query helpers.
-- [ ] Minimize cross-module visibility (`pub` -> `pub(super)`/private where possible).
+- [x] Minimize cross-module visibility (`pub` -> `pub(super)`/private where possible).
 
 Progress notes:
 - Continued `workspace.rs` decomposition by extracting manifest scan/build and filesystem ordering helpers into `src/workspace/manifest_scan.rs`.
@@ -111,13 +112,22 @@ Progress notes:
 - Continued `store.rs` decomposition by extracting workspace-state metadata helpers (lane sync, remote token, last published scope/gate metadata) into `src/store/state_meta.rs`.
 - Continued `store.rs` decomposition by extracting blob/manifest/recipe object CRUD + integrity checks into `src/store/object_crud.rs`.
 - Continued `store.rs` decomposition by extracting snap/resolution persistence and HEAD helpers into `src/store/snap_resolution.rs`.
+- Tightened core visibility where safe after module extraction:
+  - `src/store.rs`: narrowed `hash_bytes` from `pub` to `pub(crate)`.
+  - `src/workspace/gc.rs`: narrowed `GcReport` and `gc_local` surface to crate visibility.
 
 ### D) Regression and Verification
 
-- [ ] Add focused tests for extracted wizard/status/workspace/store boundaries where coverage is currently indirect.
-- [ ] Run `cargo fmt`.
-- [ ] Run `cargo clippy --all-targets -- -D warnings`.
-- [ ] Run `cargo nextest run`.
+- [x] Add focused tests for extracted wizard/status/workspace/store boundaries where coverage is currently indirect.
+- [x] Run `cargo fmt`.
+- [x] Run `cargo clippy --all-targets -- -D warnings`.
+- [x] Run `cargo nextest run`.
+
+Progress notes:
+- Ran `cargo fmt` after fetch-flow module extraction.
+- Ran `cargo clippy --all-targets -- -D warnings` with no warnings/errors.
+- Added focused parser-boundary tests for fetch command argument handling in `src/tui_shell/app/remote_fetch_parse.rs`.
+- Ran `cargo nextest run` and passed all tests (51 passed, 0 skipped).
 
 ## Exit Criteria
 

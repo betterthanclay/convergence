@@ -12,7 +12,6 @@ mod chunk_io;
 mod chunking;
 mod gc;
 use self::chunking::chunking_policy_from_config;
-pub use self::gc::GcReport;
 mod manifest_scan;
 use self::manifest_scan::build_manifest_in_memory;
 mod materialize_fs;

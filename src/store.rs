@@ -96,7 +96,7 @@ impl LocalStore {
     }
 }
 
-pub fn hash_bytes(bytes: &[u8]) -> ObjectId {
+pub(crate) fn hash_bytes(bytes: &[u8]) -> ObjectId {
     ObjectId(blake3::hash(bytes).to_hex().to_string())
 }
 
