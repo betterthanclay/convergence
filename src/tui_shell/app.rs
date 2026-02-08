@@ -61,6 +61,7 @@ mod local_snaps_restore;
 mod local_snaps_snap;
 mod local_snaps_unsnap;
 mod modal_output;
+mod modal_types;
 mod mode_commands;
 mod parse_utils;
 mod remote_access;
@@ -87,6 +88,7 @@ mod types;
 mod view_nav;
 
 use self::input_hints::{input_hint_left, input_hint_right};
+pub(super) use self::modal_types::{Modal, ModalKind, PendingAction, TextInputAction};
 use self::parse_utils::{parse_id_list, tokenize, validate_gate_id_local};
 pub(in crate::tui_shell) use self::time_utils::now_ts;
 pub(super) use self::time_utils::{fmt_ts_list, fmt_ts_ui};
@@ -133,110 +135,6 @@ struct ScrollEntry {
     ts: String,
     kind: EntryKind,
     lines: Vec<String>,
-}
-
-#[derive(Debug)]
-pub(super) enum ModalKind {
-    Viewer,
-    SnapMessage {
-        snap_id: String,
-    },
-    ConfirmAction {
-        action: PendingAction,
-    },
-    TextInput {
-        action: TextInputAction,
-        prompt: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum PendingAction {
-    Root { root_ctx: RootContext, cmd: String },
-    Mode { mode: UiMode, cmd: String },
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum TextInputAction {
-    ChunkingSet,
-    RetentionKeepLast,
-    RetentionKeepDays,
-
-    LoginUrl,
-    LoginToken,
-    LoginRepo,
-    LoginScope,
-    LoginGate,
-
-    FetchKind,
-    FetchId,
-    FetchUser,
-    FetchOptions,
-
-    PublishStart,
-    PublishSnap,
-    PublishScope,
-    PublishGate,
-    PublishMeta,
-
-    SyncStart,
-    SyncLane,
-    SyncClient,
-    SyncSnap,
-
-    ReleaseChannel,
-    ReleaseNotes,
-
-    ReleaseBundleId,
-
-    PromoteToGate,
-    PromoteBundleId,
-
-    PinBundleId,
-    PinAction,
-
-    ApproveBundleId,
-    SuperpositionsBundleId,
-
-    MemberAction,
-    MemberHandle,
-    MemberRole,
-
-    LaneMemberAction,
-    LaneMemberLane,
-    LaneMemberHandle,
-
-    MoveFrom,
-    MoveTo,
-
-    BootstrapUrl,
-    BootstrapToken,
-    BootstrapHandle,
-    BootstrapDisplayName,
-    BootstrapRepo,
-    BootstrapScope,
-    BootstrapGate,
-
-    GateGraphAddGateId,
-    GateGraphAddGateName,
-    GateGraphAddGateUpstream,
-    GateGraphEditUpstream,
-    GateGraphSetApprovals,
-
-    BrowseScope,
-    BrowseGate,
-    BrowseFilter,
-    BrowseLimit,
-}
-
-#[derive(Debug)]
-pub(super) struct Modal {
-    pub(super) title: String,
-    pub(super) lines: Vec<String>,
-    pub(super) scroll: usize,
-
-    pub(super) kind: ModalKind,
-    pub(super) input: Input,
 }
 
 pub(in crate::tui_shell) fn root_ctx_color(ctx: RootContext) -> Color {
