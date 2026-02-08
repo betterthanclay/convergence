@@ -75,7 +75,7 @@ Progress notes:
 
 ### C) Core Workspace/Store Decomposition
 
-- [ ] Split `src/workspace.rs` into modules for workspace lifecycle, snap creation, restore/diff orchestration, and metadata helpers.
+- [x] Split `src/workspace.rs` into modules for workspace lifecycle, snap creation, restore/diff orchestration, and metadata helpers.
 - [x] Split `src/store.rs` into modules for object CRUD, integrity checks, and traversal/query helpers.
 - [ ] Minimize cross-module visibility (`pub` -> `pub(super)`/private where possible).
 
