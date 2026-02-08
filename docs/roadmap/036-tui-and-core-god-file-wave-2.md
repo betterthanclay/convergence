@@ -79,6 +79,9 @@ Progress notes:
 - [ ] Split `src/store.rs` into modules for object CRUD, integrity checks, and traversal/query helpers.
 - [ ] Minimize cross-module visibility (`pub` -> `pub(super)`/private where possible).
 
+Progress notes:
+- Started `store.rs` decomposition by extracting object traversal/query helpers (`list_blob_ids`, `list_manifest_ids`, `list_recipe_ids`, `delete_blob`, `delete_manifest`, `delete_recipe`) into `src/store/traversal.rs`.
+
 ### D) Regression and Verification
 
 - [ ] Add focused tests for extracted wizard/status/workspace/store boundaries where coverage is currently indirect.
