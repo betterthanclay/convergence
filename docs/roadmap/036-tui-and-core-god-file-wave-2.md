@@ -87,6 +87,7 @@ Progress notes:
 - Started `cmd_remote_actions.rs` decomposition by extracting argument parsing for bundle/pin/approve/promote/release/superpositions into `src/tui_shell/app/remote_action_parse.rs`.
 - Continued `cmd_remote_actions.rs` decomposition by extracting superpositions command orchestration into `src/tui_shell/app/remote_superpositions.rs`.
 - Continued `cmd_remote_actions.rs` decomposition by extracting mutation flows (`cmd_pin`, `cmd_approve`, `cmd_promote`, `cmd_release`) into `src/tui_shell/app/remote_mutations.rs`.
+- Completed `cmd_remote_actions.rs` decomposition by extracting bundle/pins handlers into `src/tui_shell/app/remote_bundle_ops.rs` and removing the legacy `cmd_remote_actions.rs` file.
 - Started `workspace.rs` decomposition by extracting GC reachability traversal helpers into `src/workspace/gc.rs` and wiring `workspace.rs` through module imports.
 - Continued `workspace.rs` decomposition by extracting restore/materialization filesystem helpers into `src/workspace/materialize_fs.rs`.
 - Continued `workspace.rs` decomposition by extracting chunking policy constants/type/config parsing into `src/workspace/chunking.rs`.
