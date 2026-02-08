@@ -60,6 +60,7 @@ mod local_snaps_open;
 mod local_snaps_restore;
 mod local_snaps_snap;
 mod local_snaps_unsnap;
+mod log_types;
 mod modal_output;
 mod modal_types;
 mod mode_commands;
@@ -88,6 +89,8 @@ mod types;
 mod view_nav;
 
 use self::input_hints::{input_hint_left, input_hint_right};
+pub(super) use self::log_types::CommandDef;
+use self::log_types::{EntryKind, ScrollEntry};
 pub(super) use self::modal_types::{Modal, ModalKind, PendingAction, TextInputAction};
 use self::parse_utils::{parse_id_list, tokenize, validate_gate_id_local};
 pub(in crate::tui_shell) use self::time_utils::now_ts;
@@ -123,33 +126,11 @@ struct ViewFrame {
 
 // RenderCtx and View live in src/tui_shell/view.rs
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EntryKind {
-    Command,
-    Output,
-    Error,
-}
-
-#[derive(Clone, Debug)]
-struct ScrollEntry {
-    ts: String,
-    kind: EntryKind,
-    lines: Vec<String>,
-}
-
 pub(in crate::tui_shell) fn root_ctx_color(ctx: RootContext) -> Color {
     match ctx {
         RootContext::Local => Color::Yellow,
         RootContext::Remote => Color::Blue,
     }
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct CommandDef {
-    pub(super) name: &'static str,
-    pub(super) aliases: &'static [&'static str],
-    pub(super) usage: &'static str,
-    pub(super) help: &'static str,
 }
 
 pub(super) fn latest_releases_by_channel(

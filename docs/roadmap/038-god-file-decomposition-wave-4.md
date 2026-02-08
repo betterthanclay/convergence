@@ -77,6 +77,8 @@ Progress notes:
   - `src/tui_shell/app/types.rs`
 - Continued `app.rs` decomposition by extracting modal and text-input action types into:
   - `src/tui_shell/app/modal_types.rs`
+- Continued `app.rs` decomposition by extracting log and command metadata structs into:
+  - `src/tui_shell/app/log_types.rs`
 - Completed `cmd_dispatch.rs` decomposition into grouped modules:
   - `src/tui_shell/app/cmd_dispatch/root_dispatch.rs`
   - `src/tui_shell/app/cmd_dispatch/mode_dispatch.rs`
