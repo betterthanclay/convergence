@@ -48,12 +48,16 @@ Progress notes:
 
 ### B) TUI Wizard and View Decomposition
 
-- [ ] Split `src/tui_shell/wizard/login_bootstrap_flow.rs` into focused stages (state transitions, validation, and effect execution).
+- [x] Split `src/tui_shell/wizard/login_bootstrap_flow.rs` into focused stages (state transitions, validation, and effect execution).
 - [ ] Split `src/tui_shell/views/root.rs` into view-model assembly, layout selection, and section rendering helpers.
 - [ ] Keep top-level wizard/view modules as orchestration-only entry points.
 
 Progress notes:
 - Started `login_bootstrap_flow.rs` decomposition by extracting validation parsing helpers into `src/tui_shell/wizard/login_bootstrap_validate.rs` and wiring the flow to use them.
+- Completed `login_bootstrap_flow.rs` staged split:
+  - orchestration starts in `src/tui_shell/wizard/login_bootstrap_flow.rs`
+  - transition handlers in `src/tui_shell/wizard/login_bootstrap_transitions.rs`
+  - side-effect execution in `src/tui_shell/wizard/login_bootstrap_effects.rs`
 
 ### C) TUI App Surface Decomposition
 

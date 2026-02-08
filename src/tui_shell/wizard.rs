@@ -2,7 +2,9 @@ use super::TextInputAction;
 
 mod browse_flow;
 mod fetch_flow;
+mod login_bootstrap_effects;
 mod login_bootstrap_flow;
+mod login_bootstrap_transitions;
 mod login_bootstrap_validate;
 mod member_flow;
 mod move_flow;
