@@ -7,28 +7,21 @@ use anyhow::{Context, Result, anyhow};
 use time::format_description::well_known::Rfc3339;
 
 use crate::model::{
-    ChunkingConfig, FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind,
-    ObjectId, SnapRecord, SnapStats, compute_snap_id,
+    FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord,
+    SnapStats, compute_snap_id,
 };
 use crate::store::LocalStore;
 use crate::store::hash_bytes;
 
+mod chunking;
 mod gc;
+use self::chunking::{ChunkingPolicy, chunking_policy_from_config};
 use self::gc::collect_reachable_objects;
 mod materialize_fs;
 use self::materialize_fs::{
     clear_dir, clear_workspace_except_converge_and_git, is_empty_dir,
     is_empty_except_converge_and_git, materialize_manifest,
 };
-
-const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
-const DEFAULT_CHUNK_THRESHOLD: u64 = 8 * 1024 * 1024;
-
-#[derive(Clone, Copy, Debug)]
-struct ChunkingPolicy {
-    chunk_size: usize,
-    threshold: u64,
-}
 
 #[derive(Clone)]
 pub struct Workspace {
@@ -629,22 +622,6 @@ fn chunk_file_to_recipe_id(path: &Path, size: u64, chunk_size: usize) -> Result<
     };
     let bytes = serde_json::to_vec(&recipe).context("serialize recipe")?;
     Ok(hash_bytes(&bytes))
-}
-
-fn chunking_policy_from_config(cfg: Option<&ChunkingConfig>) -> Result<ChunkingPolicy> {
-    let chunk_size = cfg
-        .map(|c| c.chunk_size)
-        .unwrap_or(DEFAULT_CHUNK_SIZE)
-        .max(64 * 1024);
-    let threshold = cfg.map(|c| c.threshold).unwrap_or(DEFAULT_CHUNK_THRESHOLD);
-
-    let chunk_size_usize =
-        usize::try_from(chunk_size).map_err(|_| anyhow!("chunk_size too large: {}", chunk_size))?;
-
-    Ok(ChunkingPolicy {
-        chunk_size: chunk_size_usize,
-        threshold,
-    })
 }
 
 fn should_ignore_name(name: &str) -> bool {
