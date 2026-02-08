@@ -27,7 +27,7 @@ No intended product/UX changes beyond tiny fixes needed to preserve existing beh
 
 - [x] Capture file-level decomposition maps (what moves where) for each target file.
 - [x] Define module naming conventions and visibility boundaries (`pub`, `pub(crate)`, private helpers).
-- [ ] Add/update short module READMEs where needed so entry points are obvious.
+- [x] Add/update short module READMEs where needed so entry points are obvious.
 
 Initial decomposition maps:
 - `src/tui_shell/app.rs`:
@@ -99,6 +99,8 @@ Progress notes:
 - Continued `src/remote.rs` split with `src/remote/transfer.rs` for publish/upload/sync transfer workflows and publication-creation paths.
 - Continued `src/remote.rs` split with `src/remote/identity.rs` for identity/user/token and repo-member/lane-member client operations.
 - Continued `src/remote.rs` split with `src/remote/operations.rs` for repo/gate/bundle/release/promotion and GC operations.
+- Added module entry READMEs at `src/cli_exec/README.md`, `src/remote/README.md`, and `src/bin/converge_server/README.md`.
+- CLI help smoke checks (`converge --help`, `converge remote --help`) confirm command surface remains intact after decomposition.
 
 Module conventions (applied in `src/tui_shell/app/*`):
 - `cmd_*`: command handlers grouped by domain or interaction surface.
@@ -125,9 +127,9 @@ Module conventions (applied in `src/tui_shell/app/*`):
 ### D) Split `src/main.rs` (CLI)
 
 - [x] Extract command execution logic into domain modules (local, remote, gates, auth, release/promotion, resolution).
-- [ ] Keep CLI argument definitions readable and grouped.
+- [x] Keep CLI argument definitions readable and grouped.
 - [x] Reduce `run()` match complexity by delegating to module-level executors.
-- [ ] Preserve CLI UX and output compatibility.
+- [x] Preserve CLI UX and output compatibility.
 
 ### E) Split `src/remote.rs`
 
