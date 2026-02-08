@@ -71,6 +71,7 @@ Progress notes:
 - Started `workspace.rs` decomposition by extracting GC reachability traversal helpers into `src/workspace/gc.rs` and wiring `workspace.rs` through module imports.
 - Continued `workspace.rs` decomposition by extracting restore/materialization filesystem helpers into `src/workspace/materialize_fs.rs`.
 - Continued `workspace.rs` decomposition by extracting chunking policy constants/type/config parsing into `src/workspace/chunking.rs`.
+- Continued `workspace.rs` decomposition by extracting chunked file read/hash and recipe persistence helpers into `src/workspace/chunk_io.rs`.
 
 ### C) Core Workspace/Store Decomposition
 

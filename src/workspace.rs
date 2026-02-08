@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use time::format_description::well_known::Rfc3339;
 
 use crate::model::{
-    FileRecipe, FileRecipeChunk, Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord,
-    SnapStats, compute_snap_id,
+    Manifest, ManifestEntry, ManifestEntryKind, ObjectId, SnapRecord, SnapStats, compute_snap_id,
 };
 use crate::store::LocalStore;
 use crate::store::hash_bytes;
 
+mod chunk_io;
 mod chunking;
 mod gc;
+use self::chunk_io::{chunk_file_to_recipe_id, chunk_file_to_recipe_store};
 use self::chunking::{ChunkingPolicy, chunking_policy_from_config};
 use self::gc::collect_reachable_objects;
 mod materialize_fs;
@@ -465,50 +465,6 @@ impl Workspace {
     }
 }
 
-fn chunk_file_to_recipe_store(
-    store: &LocalStore,
-    path: &Path,
-    size: u64,
-    chunk_size: usize,
-) -> Result<ObjectId> {
-    let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
-    let mut r = BufReader::new(f);
-    let mut buf = vec![0u8; chunk_size];
-    let mut chunks = Vec::new();
-    let mut total: u64 = 0;
-
-    loop {
-        let n = r
-            .read(&mut buf)
-            .with_context(|| format!("read {}", path.display()))?;
-        if n == 0 {
-            break;
-        }
-        total += n as u64;
-        let blob = store.put_blob(&buf[..n])?;
-        chunks.push(FileRecipeChunk {
-            blob,
-            size: n as u32,
-        });
-    }
-
-    if total != size {
-        anyhow::bail!(
-            "size mismatch while chunking {} (expected {}, got {})",
-            path.display(),
-            size,
-            total
-        );
-    }
-
-    let recipe = FileRecipe {
-        version: 1,
-        size,
-        chunks,
-    };
-    store.put_recipe(&recipe)
-}
-
 fn build_manifest_in_memory(
     dir: &Path,
     stats: &mut SnapStats,
@@ -582,46 +538,6 @@ fn build_manifest_in_memory(
     let id = hash_bytes(&bytes);
     manifests.insert(id.clone(), manifest);
     Ok(id)
-}
-
-fn chunk_file_to_recipe_id(path: &Path, size: u64, chunk_size: usize) -> Result<ObjectId> {
-    let f = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
-    let mut r = BufReader::new(f);
-    let mut buf = vec![0u8; chunk_size];
-    let mut chunks = Vec::new();
-    let mut total: u64 = 0;
-
-    loop {
-        let n = r
-            .read(&mut buf)
-            .with_context(|| format!("read {}", path.display()))?;
-        if n == 0 {
-            break;
-        }
-        total += n as u64;
-        let blob = hash_bytes(&buf[..n]);
-        chunks.push(FileRecipeChunk {
-            blob,
-            size: n as u32,
-        });
-    }
-
-    if total != size {
-        anyhow::bail!(
-            "size mismatch while chunking {} (expected {}, got {})",
-            path.display(),
-            size,
-            total
-        );
-    }
-
-    let recipe = FileRecipe {
-        version: 1,
-        size,
-        chunks,
-    };
-    let bytes = serde_json::to_vec(&recipe).context("serialize recipe")?;
-    Ok(hash_bytes(&bytes))
 }
 
 fn should_ignore_name(name: &str) -> bool {
