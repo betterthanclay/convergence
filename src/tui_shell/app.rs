@@ -1,15 +1,8 @@
-use std::io::{self, IsTerminal};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -81,10 +74,12 @@ mod render;
 mod root_context;
 mod root_refresh;
 mod root_style;
+mod runtime;
 mod settings_chunking;
 mod settings_do_mode;
 mod settings_overview;
 mod settings_retention;
+mod state;
 mod superpositions_nav;
 mod time_utils;
 mod types;
@@ -97,140 +92,12 @@ pub(super) use self::modal_types::{Modal, ModalKind, PendingAction, TextInputAct
 use self::parse_utils::{parse_id_list, tokenize, validate_gate_id_local};
 pub(super) use self::release_summary::latest_releases_by_channel;
 pub(in crate::tui_shell) use self::root_style::root_ctx_color;
+pub(super) use self::runtime::run;
+pub(super) use self::state::App;
+pub(in crate::tui_shell::app) use self::state::ViewFrame;
 pub(in crate::tui_shell) use self::time_utils::now_ts;
 pub(super) use self::time_utils::{fmt_ts_list, fmt_ts_ui};
 pub(super) use self::types::{RootContext, TimestampMode, UiMode};
-
-pub(super) fn run() -> Result<()> {
-    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        anyhow::bail!("TUI requires an interactive terminal (TTY)");
-    }
-
-    let mut stdout = io::stdout();
-    enable_raw_mode().context("enable raw mode")?;
-    execute!(stdout, EnterAlternateScreen).context("enter alternate screen")?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("create terminal")?;
-    terminal.clear().ok();
-
-    let mut app = App::load();
-    let res = event_loop::run_loop(&mut terminal, &mut app);
-
-    disable_raw_mode().ok();
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
-    terminal.show_cursor().ok();
-
-    res
-}
-
-struct ViewFrame {
-    view: Box<dyn View>,
-}
-
-// RenderCtx and View live in src/tui_shell/view.rs
-
-pub(super) struct App {
-    workspace: Option<Workspace>,
-    workspace_err: Option<String>,
-
-    root_ctx: RootContext,
-    ts_mode: TimestampMode,
-
-    // Cached for UI hints; updated on refresh.
-    remote_configured: bool,
-    remote_identity: Option<String>,
-    remote_identity_note: Option<String>,
-    remote_identity_last_fetch: Option<OffsetDateTime>,
-    lane_last_synced: std::collections::HashMap<String, String>,
-    latest_snap_id: Option<String>,
-    last_published_snap_id: Option<String>,
-
-    // Internal log (useful for debugging) but no longer the primary UI.
-    log: Vec<ScrollEntry>,
-
-    last_command: Option<String>,
-    last_result: Option<ScrollEntry>,
-
-    modal: Option<Modal>,
-
-    confirmed_action: Option<PendingAction>,
-
-    pub(super) login_wizard: Option<LoginWizard>,
-    pub(super) fetch_wizard: Option<FetchWizard>,
-    pub(super) publish_wizard: Option<PublishWizard>,
-    pub(super) sync_wizard: Option<SyncWizard>,
-    pub(super) release_wizard: Option<ReleaseWizard>,
-    pub(super) pin_wizard: Option<PinWizard>,
-    pub(super) promote_wizard: Option<PromoteWizard>,
-    pub(super) member_wizard: Option<MemberWizard>,
-    pub(super) lane_member_wizard: Option<LaneMemberWizard>,
-    pub(super) browse_wizard: Option<BrowseWizard>,
-    pub(super) move_wizard: Option<MoveWizard>,
-    pub(super) bootstrap_wizard: Option<BootstrapWizard>,
-
-    gate_graph_new_gate_id: Option<String>,
-    gate_graph_new_gate_name: Option<String>,
-
-    input: Input,
-
-    suggestions: Vec<CommandDef>,
-    suggestion_selected: usize,
-
-    hint_rotation: [usize; 10],
-
-    frames: Vec<ViewFrame>,
-
-    quit: bool,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            workspace: None,
-            workspace_err: None,
-            root_ctx: RootContext::Local,
-            ts_mode: TimestampMode::Relative,
-            remote_configured: false,
-            remote_identity: None,
-            remote_identity_note: None,
-            remote_identity_last_fetch: None,
-            lane_last_synced: std::collections::HashMap::new(),
-            latest_snap_id: None,
-            last_published_snap_id: None,
-            log: Vec::new(),
-            last_command: None,
-            last_result: None,
-            modal: None,
-            confirmed_action: None,
-
-            login_wizard: None,
-            fetch_wizard: None,
-            publish_wizard: None,
-            sync_wizard: None,
-            release_wizard: None,
-            pin_wizard: None,
-            promote_wizard: None,
-            member_wizard: None,
-            lane_member_wizard: None,
-            browse_wizard: None,
-            move_wizard: None,
-            bootstrap_wizard: None,
-
-            gate_graph_new_gate_id: None,
-            gate_graph_new_gate_name: None,
-            input: Input::default(),
-            suggestions: Vec::new(),
-            suggestion_selected: 0,
-
-            hint_rotation: [0; 10],
-            frames: vec![ViewFrame {
-                view: Box::new(RootView::new(RootContext::Local)),
-            }],
-            quit: false,
-        }
-    }
-}
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]

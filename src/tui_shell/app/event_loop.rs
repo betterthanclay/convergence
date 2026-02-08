@@ -1,4 +1,8 @@
 use super::*;
+use anyhow::Context;
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use std::io;
 
 pub(super) fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,

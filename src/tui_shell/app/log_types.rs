@@ -1,15 +1,15 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::tui_shell::app) enum EntryKind {
+pub(in crate::tui_shell) enum EntryKind {
     Command,
     Output,
     Error,
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::tui_shell::app) struct ScrollEntry {
-    pub(in crate::tui_shell::app) ts: String,
-    pub(in crate::tui_shell::app) kind: EntryKind,
-    pub(in crate::tui_shell::app) lines: Vec<String>,
+pub(in crate::tui_shell) struct ScrollEntry {
+    pub(in crate::tui_shell) ts: String,
+    pub(in crate::tui_shell) kind: EntryKind,
+    pub(in crate::tui_shell) lines: Vec<String>,
 }
 
 #[derive(Clone, Debug)]

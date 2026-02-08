@@ -68,7 +68,7 @@ Progress notes:
 
 ### C) TUI App Surface Decomposition
 
-- [ ] Split `src/tui_shell/app.rs` into app state construction, mode switching, and event-loop dispatch helpers.
+- [x] Split `src/tui_shell/app.rs` into app state construction, mode switching, and event-loop dispatch helpers.
 - [x] Split `src/tui_shell/app/cmd_dispatch.rs` into grouped command routing modules by domain.
 - [x] Split `src/tui_shell/modal.rs` into modal state transitions and rendering helpers.
 
@@ -82,6 +82,10 @@ Progress notes:
 - Continued `app.rs` decomposition by extracting root-context color and release-summary helpers into:
   - `src/tui_shell/app/root_style.rs`
   - `src/tui_shell/app/release_summary.rs`
+- Completed staged `app.rs` decomposition by extracting:
+  - `src/tui_shell/app/state.rs` (app state declarations + default wiring)
+  - `src/tui_shell/app/runtime.rs` (TTY/terminal bootstrap run path)
+  leaving `src/tui_shell/app.rs` as a thin composition/re-export layer.
 - Completed `cmd_dispatch.rs` decomposition into grouped modules:
   - `src/tui_shell/app/cmd_dispatch/root_dispatch.rs`
   - `src/tui_shell/app/cmd_dispatch/mode_dispatch.rs`
