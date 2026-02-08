@@ -59,6 +59,7 @@ mod mode_commands;
 mod parse_utils;
 mod remote_fetch_parse;
 mod remote_list_views;
+mod remote_members;
 mod render;
 mod root_context;
 mod root_refresh;

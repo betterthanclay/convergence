@@ -77,6 +77,7 @@ Progress notes:
 - Continued `app.rs` decomposition by extracting mode-sensitive command availability filtering into `src/tui_shell/app/command_availability.rs`.
 - Continued `cmd_remote_views.rs` decomposition by extracting inbox/bundles list builders (`open_inbox_view`, `open_bundles_view`) into `src/tui_shell/app/remote_list_views.rs`.
 - Continued `cmd_remote_views.rs` decomposition by extracting fetch argument parsing/validation into `src/tui_shell/app/remote_fetch_parse.rs`.
+- Continued `cmd_remote_views.rs` decomposition by extracting member and lane-member command handlers into `src/tui_shell/app/remote_members.rs`.
 - Started `workspace.rs` decomposition by extracting GC reachability traversal helpers into `src/workspace/gc.rs` and wiring `workspace.rs` through module imports.
 - Continued `workspace.rs` decomposition by extracting restore/materialization filesystem helpers into `src/workspace/materialize_fs.rs`.
 - Continued `workspace.rs` decomposition by extracting chunking policy constants/type/config parsing into `src/workspace/chunking.rs`.
