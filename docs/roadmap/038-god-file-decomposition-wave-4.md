@@ -73,6 +73,8 @@ Progress notes:
 - [x] Split `src/tui_shell/modal.rs` into modal state transitions and rendering helpers.
 
 Progress notes:
+- Started `app.rs` decomposition by extracting core mode/context/time-display enums and impls into:
+  - `src/tui_shell/app/types.rs`
 - Completed `cmd_dispatch.rs` decomposition into grouped modules:
   - `src/tui_shell/app/cmd_dispatch/root_dispatch.rs`
   - `src/tui_shell/app/cmd_dispatch/mode_dispatch.rs`

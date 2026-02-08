@@ -83,12 +83,14 @@ mod settings_overview;
 mod settings_retention;
 mod superpositions_nav;
 mod time_utils;
+mod types;
 mod view_nav;
 
 use self::input_hints::{input_hint_left, input_hint_right};
 use self::parse_utils::{parse_id_list, tokenize, validate_gate_id_local};
 pub(in crate::tui_shell) use self::time_utils::now_ts;
 pub(super) use self::time_utils::{fmt_ts_list, fmt_ts_ui};
+pub(super) use self::types::{RootContext, TimestampMode, UiMode};
 
 pub(super) fn run() -> Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -113,74 +115,8 @@ pub(super) fn run() -> Result<()> {
     res
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum UiMode {
-    Root,
-    Snaps,
-    Inbox,
-    Bundles,
-    Releases,
-    Lanes,
-    Superpositions,
-    GateGraph,
-    Settings,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum RootContext {
-    Local,
-    Remote,
-}
-
-impl RootContext {
-    pub(super) fn label(self) -> &'static str {
-        match self {
-            RootContext::Local => "local",
-            RootContext::Remote => "remote",
-        }
-    }
-}
-
-impl UiMode {
-    fn prompt(self) -> &'static str {
-        match self {
-            UiMode::Root => "root>",
-            UiMode::Snaps => "history>",
-            UiMode::Inbox => "inbox>",
-            UiMode::Bundles => "bundles>",
-            UiMode::Releases => "releases>",
-            UiMode::Lanes => "lanes>",
-            UiMode::Superpositions => "supers>",
-            UiMode::GateGraph => "gates>",
-            UiMode::Settings => "settings>",
-        }
-    }
-}
-
 struct ViewFrame {
     view: Box<dyn View>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum TimestampMode {
-    Relative,
-    Absolute,
-}
-
-impl TimestampMode {
-    pub(super) fn toggle(self) -> Self {
-        match self {
-            TimestampMode::Relative => TimestampMode::Absolute,
-            TimestampMode::Absolute => TimestampMode::Relative,
-        }
-    }
-
-    pub(super) fn label(self) -> &'static str {
-        match self {
-            TimestampMode::Relative => "relative",
-            TimestampMode::Absolute => "absolute",
-        }
-    }
 }
 
 // RenderCtx and View live in src/tui_shell/view.rs
