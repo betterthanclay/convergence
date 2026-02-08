@@ -138,7 +138,7 @@ Module conventions (applied in `src/tui_shell/app/*`):
 
 ### F) Verification + Hygiene
 
-- [ ] Keep docs aligned with final structure (`docs/architecture/10-cli-and-tui.md` and relevant READMEs/decision docs as needed).
+- [x] Keep docs aligned with final structure (`docs/architecture/10-cli-and-tui.md` and relevant READMEs/decision docs as needed).
 - [x] Run `cargo fmt`.
 - [x] Run `cargo clippy --all-targets -- -D warnings`.
 - [x] Run `cargo nextest run`.
