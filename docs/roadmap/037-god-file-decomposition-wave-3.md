@@ -58,14 +58,16 @@ Progress notes:
 
 ### B) TUI Status and Local Command Decomposition
 
-- [ ] Split `src/tui_shell/status/tree_diff.rs` into focused modules (leaf collection, identity mapping, rename heuristics, rendering payload assembly).
+- [x] Split `src/tui_shell/status/tree_diff.rs` into focused modules (leaf collection, identity mapping, rename heuristics, rendering payload assembly).
 - [x] Split `src/tui_shell/app/local_snaps.rs` into focused mode handlers (filtering, message edits, restore/revert actions, view refresh).
-- [ ] Keep top-level status/local command modules as orchestration-only entry points.
+- [x] Keep top-level status/local command modules as orchestration-only entry points.
 
 Progress notes:
 - Started `tree_diff.rs` decomposition by extracting blob/recipe IO helpers into `src/tui_shell/status/rename_io.rs` and wiring `tree_diff.rs` to consume these helpers.
 - Continued `tree_diff.rs` decomposition by extracting rename detection and consumed-path tracking into `src/tui_shell/status/rename_match.rs`.
 - Continued `tree_diff.rs` decomposition by extracting manifest tree traversal and status-delta walk helpers into `src/tui_shell/status/tree_walk.rs`.
+- Continued `tree_diff.rs` decomposition by extracting remote status/dashboard builders into `src/tui_shell/status/remote_status.rs`.
+- Completed `tree_diff.rs` decomposition by extracting local status line assembly into `src/tui_shell/status/local_status.rs`, reducing `tree_diff.rs` to thin diff orchestration.
 - Started `local_snaps.rs` decomposition by extracting snaps filter and clear-filter handlers into `src/tui_shell/app/local_snaps_filter.rs`.
 - Continued `local_snaps.rs` decomposition by extracting snap message edit/clear handling into `src/tui_shell/app/local_snaps_message.rs`.
 - Continued `local_snaps.rs` decomposition by extracting snaps list/open flow into `src/tui_shell/app/local_snaps_open.rs`.

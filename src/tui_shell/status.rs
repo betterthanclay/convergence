@@ -11,20 +11,23 @@ pub(super) use self::summary_utils::{
     extract_change_summary, jaccard_similarity,
 };
 mod identity_collect;
+mod local_status;
+mod remote_status;
 mod rename_helpers;
 mod rename_io;
 mod rename_match;
 mod text_delta;
 mod tree_diff;
 mod tree_walk;
+pub(in crate::tui_shell) use self::local_status::local_status_lines;
+pub(in crate::tui_shell) use self::remote_status::{
+    DashboardData, dashboard_data, remote_status_lines,
+};
 #[cfg(test)]
 use self::rename_helpers::StatusChange;
 use self::rename_helpers::default_chunk_size_bytes;
 #[cfg(test)]
 use self::tree_diff::diff_trees_with_renames;
-pub(in crate::tui_shell) use self::tree_diff::{
-    DashboardData, dashboard_data, local_status_lines, remote_status_lines,
-};
 
 fn chunk_size_bytes_from_workspace(ws: &Workspace) -> usize {
     let cfg = ws.store.read_config().ok();
