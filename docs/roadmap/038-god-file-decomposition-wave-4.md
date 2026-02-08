@@ -119,10 +119,15 @@ Progress notes:
 
 ### E) Regression and Verification
 
-- [ ] Add focused tests for newly extracted boundaries where current coverage is indirect.
+- [x] Add focused tests for newly extracted boundaries where current coverage is indirect.
 - [x] Run `cargo fmt`.
 - [x] Run `cargo clippy --all-targets -- -D warnings`.
 - [x] Run `cargo nextest run` (or document fallback if environment instability recurs).
+
+Progress notes:
+- Added focused runtime-boundary tests in `src/bin/converge_server/runtime.rs` to verify identity bootstrapping behavior:
+  - dev identity is seeded and persisted when `--bootstrap-token` is absent and identity store is empty.
+  - identity remains empty when `--bootstrap-token` is provided and no users/tokens exist yet.
 
 ## Exit Criteria
 
