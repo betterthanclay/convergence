@@ -62,6 +62,7 @@ Progress notes:
 - Continued `wizard.rs` decomposition by extracting release/pin/promote flow handlers into `src/tui_shell/wizard/release_ops_flow.rs`.
 - Continued `wizard.rs` decomposition by extracting publish/sync flow handlers into `src/tui_shell/wizard/publish_sync_flow.rs`.
 - Continued `wizard.rs` decomposition by extracting login/bootstrap flow handlers into `src/tui_shell/wizard/login_bootstrap_flow.rs`.
+- Started `status.rs` decomposition by extracting summary/parsing helpers (`ChangeSummary`, baseline/change-key parsing, Jaccard + blank-line normalization) into `src/tui_shell/status/summary_utils.rs` and re-exporting from `status.rs`.
 
 ### C) Core Workspace/Store Decomposition
 
