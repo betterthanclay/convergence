@@ -79,13 +79,18 @@ Progress notes:
 
 - [ ] Split `src/main.rs` into command registration/composition modules and execution wiring.
 - [x] Split `src/tui_shell/commands.rs` into grouped command catalogs by mode/domain.
-- [ ] Split `src/cli_exec/delivery.rs` into publish/promote/release-specific execution modules.
+- [x] Split `src/cli_exec/delivery.rs` into publish/promote/release-specific execution modules.
 
 Progress notes:
 - Started `commands.rs` decomposition by extracting mode-specific command catalogs (`snaps`, `inbox`, `bundles`, `releases`, `lanes`, `gate-graph`, `superpositions`) into `src/tui_shell/commands/mode_defs.rs`, with `commands.rs` re-exporting the same API.
 - Completed `commands.rs` decomposition by extracting root/global/auth command catalogs into `src/tui_shell/commands/root_defs.rs`, leaving `commands.rs` as thin module composition/re-export.
 - Started `main.rs` decomposition by extracting subordinate CLI subcommand enums into `src/cli_subcommands.rs`, keeping top-level `Commands` and runtime entry flow in `main.rs`.
 - Continued `main.rs` decomposition by extracting the top-level `Commands` enum into `src/cli_commands.rs` and re-exporting command types from `main.rs`.
+- Completed `cli_exec/delivery.rs` decomposition by splitting handlers into focused modules:
+  - `src/cli_exec/delivery/publish_sync.rs`
+  - `src/cli_exec/delivery/transfer.rs`
+  - `src/cli_exec/delivery/moderation_status.rs`
+  with `src/cli_exec/delivery/mod.rs` as composition/re-export layer.
 
 ### D) Server Surface Decomposition
 
