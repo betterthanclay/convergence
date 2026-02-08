@@ -78,8 +78,12 @@ Progress notes:
 ### C) CLI Surface Decomposition
 
 - [ ] Split `src/main.rs` into command registration/composition modules and execution wiring.
-- [ ] Split `src/tui_shell/commands.rs` into grouped command catalogs by mode/domain.
+- [x] Split `src/tui_shell/commands.rs` into grouped command catalogs by mode/domain.
 - [ ] Split `src/cli_exec/delivery.rs` into publish/promote/release-specific execution modules.
+
+Progress notes:
+- Started `commands.rs` decomposition by extracting mode-specific command catalogs (`snaps`, `inbox`, `bundles`, `releases`, `lanes`, `gate-graph`, `superpositions`) into `src/tui_shell/commands/mode_defs.rs`, with `commands.rs` re-exporting the same API.
+- Completed `commands.rs` decomposition by extracting root/global/auth command catalogs into `src/tui_shell/commands/root_defs.rs`, leaving `commands.rs` as thin module composition/re-export.
 
 ### D) Server Surface Decomposition
 
