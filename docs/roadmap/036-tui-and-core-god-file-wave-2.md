@@ -60,6 +60,7 @@ Progress notes:
 - Continued `wizard.rs` decomposition by extracting browse-flow transitions (`start_browse_wizard` / `continue_browse_wizard` / `finish_browse_wizard`) into `src/tui_shell/wizard/browse_flow.rs`.
 - Continued `wizard.rs` decomposition by extracting member and lane-member flows into `src/tui_shell/wizard/member_flow.rs`.
 - Continued `wizard.rs` decomposition by extracting release/pin/promote flow handlers into `src/tui_shell/wizard/release_ops_flow.rs`.
+- Continued `wizard.rs` decomposition by extracting publish/sync flow handlers into `src/tui_shell/wizard/publish_sync_flow.rs`.
 
 ### C) Core Workspace/Store Decomposition
 
