@@ -57,6 +57,7 @@ mod lifecycle;
 mod modal_output;
 mod mode_commands;
 mod parse_utils;
+mod remote_fetch_parse;
 mod remote_list_views;
 mod render;
 mod root_context;

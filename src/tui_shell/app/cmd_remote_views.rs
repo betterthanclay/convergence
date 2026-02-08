@@ -1,3 +1,4 @@
+use super::remote_fetch_parse::parse_fetch_spec;
 use super::*;
 
 impl App {
@@ -18,134 +19,15 @@ impl App {
             None => return,
         };
 
-        let mut snap_id: Option<String> = None;
-        let mut bundle_id: Option<String> = None;
-        let mut release: Option<String> = None;
-        let mut lane: Option<String> = None;
-        let mut user: Option<String> = None;
-
-        let mut restore = false;
-        let mut into: Option<String> = None;
-        let mut force = false;
-
-        // Flagless UX:
-        // - `fetch snap <id>`
-        // - `fetch bundle <id> [restore] [into <dir>] [force]`
-        // - `fetch release <channel> [restore] [into <dir>] [force]`
-        // - `fetch lane <lane> [user <handle>]`
-        // - `fetch <snap_id>` (shorthand)
-        let mut free = Vec::new();
-        let mut i = 0;
-        while i < args.len() {
-            match args[i].as_str() {
-                "--snap-id" | "snap" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error(
-                            "usage: fetch (snap|bundle|release|lane) <id...>".to_string(),
-                        );
-                        return;
-                    };
-                    snap_id = Some(v.clone());
-                }
-                "--bundle-id" | "bundle" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error(
-                            "usage: fetch (snap|bundle|release|lane) <id...>".to_string(),
-                        );
-                        return;
-                    };
-                    bundle_id = Some(v.clone());
-                }
-                "--release" | "release" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error(
-                            "usage: fetch (snap|bundle|release|lane) <id...>".to_string(),
-                        );
-                        return;
-                    };
-                    release = Some(v.clone());
-                }
-                "--lane" | "lane" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error(
-                            "usage: fetch (snap|bundle|release|lane) <id...>".to_string(),
-                        );
-                        return;
-                    };
-                    lane = Some(v.clone());
-                }
-                "--user" | "user" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error("usage: fetch lane <lane> [user <handle>]".to_string());
-                        return;
-                    };
-                    user = Some(v.clone());
-                }
-                "--restore" | "restore" => {
-                    restore = true;
-                }
-                "--into" | "into" => {
-                    i += 1;
-                    let Some(v) = args.get(i) else {
-                        self.push_error("usage: fetch [restore] [into <dir>] [force]".to_string());
-                        return;
-                    };
-                    into = Some(v.clone());
-                }
-                "--force" | "force" => {
-                    force = true;
-                }
-                a => {
-                    free.push(a.to_string());
-                }
+        let parsed = match parse_fetch_spec(args) {
+            Ok(p) => p,
+            Err(msg) => {
+                self.push_error(msg);
+                return;
             }
-            i += 1;
-        }
+        };
 
-        // Allow `fetch <snap_id>` shorthand.
-        if !free.is_empty()
-            && snap_id.is_none()
-            && bundle_id.is_none()
-            && release.is_none()
-            && lane.is_none()
-            && user.is_none()
-            && free.len() == 1
-        {
-            snap_id = Some(free[0].clone());
-            free.clear();
-        }
-
-        // Allow `fetch lane <lane> <user>` shorthand.
-        if !free.is_empty() && lane.is_some() && user.is_none() && free.len() == 1 {
-            user = Some(free[0].clone());
-            free.clear();
-        }
-
-        if !free.is_empty() {
-            self.push_error("usage: fetch (snap|bundle|release|lane) <id...>".to_string());
-            return;
-        }
-
-        if (bundle_id.is_some() || release.is_some())
-            && (snap_id.is_some() || lane.is_some() || user.is_some())
-        {
-            self.push_error(
-                "fetch: choose one target: snap/lane, or bundle, or release".to_string(),
-            );
-            return;
-        }
-
-        if bundle_id.is_some() && release.is_some() {
-            self.push_error("fetch: choose one target: bundle or release".to_string());
-            return;
-        }
-
-        if let Some(bundle_id) = bundle_id.as_deref() {
+        if let Some(bundle_id) = parsed.bundle_id.as_deref() {
             let bundle = match client.get_bundle(bundle_id) {
                 Ok(b) => b,
                 Err(err) => {
@@ -159,8 +41,8 @@ impl App {
                 return;
             }
 
-            if restore {
-                let dest = if let Some(p) = into.as_deref() {
+            if parsed.restore {
+                let dest = if let Some(p) = parsed.into.as_deref() {
                     std::path::PathBuf::from(p)
                 } else {
                     let short = bundle.id.chars().take(8).collect::<String>();
@@ -171,7 +53,7 @@ impl App {
                     std::env::temp_dir().join(format!("converge-grab-bundle-{}-{}", short, nanos))
                 };
 
-                if let Err(err) = ws.materialize_manifest_to(&root, &dest, force) {
+                if let Err(err) = ws.materialize_manifest_to(&root, &dest, parsed.force) {
                     self.push_error(format!("restore: {:#}", err));
                     return;
                 }
@@ -187,7 +69,7 @@ impl App {
             return;
         }
 
-        if let Some(channel) = release.as_deref() {
+        if let Some(channel) = parsed.release.as_deref() {
             let rel = match client.get_release(channel) {
                 Ok(r) => r,
                 Err(err) => {
@@ -209,8 +91,8 @@ impl App {
                 return;
             }
 
-            if restore {
-                let dest = if let Some(p) = into.as_deref() {
+            if parsed.restore {
+                let dest = if let Some(p) = parsed.into.as_deref() {
                     std::path::PathBuf::from(p)
                 } else {
                     let short = rel.bundle_id.chars().take(8).collect::<String>();
@@ -221,7 +103,7 @@ impl App {
                     std::env::temp_dir().join(format!("converge-grab-release-{}-{}", short, nanos))
                 };
 
-                if let Err(err) = ws.materialize_manifest_to(&root, &dest, force) {
+                if let Err(err) = ws.materialize_manifest_to(&root, &dest, parsed.force) {
                     self.push_error(format!("restore: {:#}", err));
                     return;
                 }
@@ -241,10 +123,10 @@ impl App {
             return;
         }
 
-        let res = if let Some(lane) = lane.as_deref() {
-            client.fetch_lane_heads(&ws.store, lane, user.as_deref())
+        let res = if let Some(lane) = parsed.lane.as_deref() {
+            client.fetch_lane_heads(&ws.store, lane, parsed.user.as_deref())
         } else {
-            client.fetch_publications(&ws.store, snap_id.as_deref())
+            client.fetch_publications(&ws.store, parsed.snap_id.as_deref())
         };
 
         match res {
