@@ -102,6 +102,11 @@ Progress notes:
 - [ ] Reduce root-file wildcard imports where decomposition allows narrower imports.
 - [ ] Minimize cross-module visibility (`pub` -> `pub(crate)`/private where possible) after extraction.
 
+Progress notes:
+- Started `converge-server.rs` decomposition by extracting server state/domain type declarations into:
+  - `src/bin/converge_server/types.rs`
+  with `src/bin/converge-server.rs` now focused more on bootstrap/runtime wiring.
+
 ### E) Regression and Verification
 
 - [ ] Add focused tests for newly extracted boundaries where current coverage is indirect.
