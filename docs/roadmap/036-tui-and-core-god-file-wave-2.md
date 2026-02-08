@@ -67,6 +67,7 @@ Progress notes:
 - Continued `status.rs` decomposition by extracting manifest identity traversal helpers into `src/tui_shell/status/identity_collect.rs`.
 - Continued `status.rs` decomposition by extracting line-delta formatting and Myers/UTF-8 text delta helpers into `src/tui_shell/status/text_delta.rs`.
 - Continued `status.rs` decomposition by moving recipe-rename scoring thresholds/comparison helpers into `src/tui_shell/status/rename_helpers.rs`.
+- Continued `status.rs` decomposition by moving core diff/rename orchestration and dashboard/remote-status assembly into `src/tui_shell/status/tree_diff.rs`, keeping `status.rs` as module composition and shared exports.
 
 ### C) Core Workspace/Store Decomposition
 
