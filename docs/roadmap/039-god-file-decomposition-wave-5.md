@@ -72,16 +72,36 @@ Progress notes:
 
 ### D) CLI Release Resolve Decomposition
 
-- [ ] Split `src/cli_exec/release_resolve.rs` into resolve planning, validation, and output/report helpers.
-- [ ] Keep CLI output ordering and error text behavior-compatible.
-- [ ] Add focused unit tests around extracted pure helpers.
+- [x] Split `src/cli_exec/release_resolve.rs` into resolve planning, validation, and output/report helpers.
+- [x] Keep CLI output ordering and error text behavior-compatible.
+- [x] Add focused unit tests around extracted pure helpers.
+
+Progress notes:
+- Replaced `src/cli_exec/release_resolve.rs` with module directory:
+  - `src/cli_exec/release_resolve/mod.rs`
+  - `src/cli_exec/release_resolve/release_cmd.rs`
+  - `src/cli_exec/release_resolve/resolve_init.rs`
+  - `src/cli_exec/release_resolve/resolve_pick_clear_show.rs`
+  - `src/cli_exec/release_resolve/resolve_apply_validate.rs`
+- Preserved CLI command dispatch surface and output/error text in release/resolve flows while isolating command-group logic.
+- Added unit coverage for extracted pure resolve-pick helper (`parse_pick_specifier`) including:
+  - conflicting/ambiguous flag validation
+  - missing required selector validation
+  - out-of-range variant validation
+  - accepted variant/key selector forms
 
 ### E) Verification and Hygiene
 
-- [ ] Run `cargo fmt`.
-- [ ] Run `cargo clippy --all-targets -- -D warnings`.
-- [ ] Run `cargo nextest run`.
+- [x] Run `cargo fmt`.
+- [x] Run `cargo clippy --all-targets -- -D warnings`.
+- [x] Run `cargo nextest run`.
 - [ ] Update any impacted architecture/decision notes if boundaries change materially.
+
+Progress notes:
+- Current validation status after Wave 5 decomposition slices:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - `cargo nextest run` passed (`60 passed`, `2 leaky`, `0 skipped`)
 
 ## Exit Criteria
 
