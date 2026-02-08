@@ -110,11 +110,11 @@ Module conventions (applied in `src/tui_shell/app/*`):
 
 ### C) Split `src/bin/converge-server.rs`
 
-- [ ] Extract route registration into route-domain modules (identity, repos, lanes, gates, publications/bundles, releases/promotions, objects, GC).
-- [ ] Extract handler implementations by domain.
-- [ ] Extract persistence/repository-state loading and save helpers into persistence modules.
-- [ ] Extract validation and shared response/error helpers into utility modules.
-- [ ] Keep a thin `converge-server.rs` entrypoint (`Args`, bootstrap wiring, router composition).
+- [x] Extract route registration into route-domain modules (identity, repos, lanes, gates, publications/bundles, releases/promotions, objects, GC).
+- [x] Extract handler implementations by domain.
+- [x] Extract persistence/repository-state loading and save helpers into persistence modules.
+- [x] Extract validation and shared response/error helpers into utility modules.
+- [x] Keep a thin `converge-server.rs` entrypoint (`Args`, bootstrap wiring, router composition).
 
 ### D) Split `src/main.rs` (CLI)
 
