@@ -61,7 +61,7 @@ Progress notes:
 - Moved inbox/bundles view openers into `src/tui_shell/app/cmd_remote_views.rs`.
 - Extracted default action/hint/confirm flow into `src/tui_shell/app/default_actions.rs`.
 - Reduced `src/tui_shell/app.rs` to focused orchestration/state (currently ~970 LOC).
-- Started `src/main.rs` decomposition with `src/cli_exec.rs` and moved `remote` + `gates` + `token` + `user` command execution branches behind module-level handlers.
+- Started `src/main.rs` decomposition with `src/cli_exec.rs` and moved `remote` + `gates` + `token` + `user` + `members` + `lane` command execution branches behind module-level handlers.
 
 Module conventions (applied in `src/tui_shell/app/*`):
 - `cmd_*`: command handlers grouped by domain or interaction surface.
