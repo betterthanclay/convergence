@@ -57,9 +57,18 @@ Progress notes:
 
 ### C) Server Repo Handler Decomposition
 
-- [ ] Split `src/bin/converge_server/handlers_repo.rs` into focused modules by concern (repo CRUD, membership, lanes/heads).
-- [ ] Keep route signatures and response payloads unchanged.
+- [x] Split `src/bin/converge_server/handlers_repo.rs` into focused modules by concern (repo CRUD, membership, lanes/heads).
+- [x] Keep route signatures and response payloads unchanged.
 - [ ] Reduce wildcard import dependence where direct sibling imports are possible.
+
+Progress notes:
+- Replaced monolithic repo handler file with module directory:
+  - `src/bin/converge_server/handlers_repo/mod.rs`
+  - `src/bin/converge_server/handlers_repo/repo_crud.rs`
+  - `src/bin/converge_server/handlers_repo/members.rs`
+  - `src/bin/converge_server/handlers_repo/lanes.rs`
+  - `src/bin/converge_server/handlers_repo/lane_heads.rs`
+- Kept route wiring behavior-compatible by preserving exported handler names used by `routes.rs`.
 
 ### D) CLI Release Resolve Decomposition
 

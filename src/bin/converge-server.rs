@@ -34,7 +34,7 @@ use self::gate_graph_validation::*;
 #[path = "converge_server/handlers_identity.rs"]
 mod handlers_identity;
 use self::handlers_identity::*;
-#[path = "converge_server/handlers_repo.rs"]
+#[path = "converge_server/handlers_repo/mod.rs"]
 mod handlers_repo;
 #[path = "converge_server/handlers_system.rs"]
 mod handlers_system;
