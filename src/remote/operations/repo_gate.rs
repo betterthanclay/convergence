@@ -127,19 +127,21 @@ mod tests {
 
     #[test]
     fn format_validation_error_limits_issue_lines() {
-        let mut issues = Vec::new();
-        for i in 0..10 {
-            issues.push(super::super::super::types::GateGraphIssueView {
-                code: "cycle".to_string(),
-                message: format!("issue {}", i),
-                gate: Some(format!("g{}", i)),
-                upstream: None,
-            });
-        }
-        let v = GateGraphValidationError {
-            error: "invalid graph".to_string(),
-            issues,
-        };
+        let issues = (0..10)
+            .map(|i| {
+                serde_json::json!({
+                    "code": "cycle",
+                    "message": format!("issue {}", i),
+                    "gate": format!("g{}", i),
+                    "upstream": serde_json::Value::Null
+                })
+            })
+            .collect::<Vec<_>>();
+        let v: GateGraphValidationError = serde_json::from_value(serde_json::json!({
+            "error": "invalid graph",
+            "issues": issues
+        }))
+        .expect("parse validation error");
         let text = format_gate_graph_validation_error(&v);
         assert!(text.contains("invalid graph"));
         assert!(text.contains("- cycle gate=g0: issue 0"));
