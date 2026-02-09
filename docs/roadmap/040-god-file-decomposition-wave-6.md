@@ -70,9 +70,17 @@ Progress notes:
 
 ### D) TUI Gate Graph Command Decomposition
 
-- [ ] Split `src/tui_shell/app/cmd_gate_graph.rs` into parsing/validation/apply helpers.
-- [ ] Keep command UX and output strings behavior-compatible.
-- [ ] Reduce cross-module visibility where extraction allows.
+- [x] Split `src/tui_shell/app/cmd_gate_graph.rs` into parsing/validation/apply helpers.
+- [x] Keep command UX and output strings behavior-compatible.
+- [x] Reduce cross-module visibility where extraction allows.
+
+Progress notes:
+- Replaced `src/tui_shell/app/cmd_gate_graph.rs` with module directory:
+  - `src/tui_shell/app/cmd_gate_graph/mod.rs`
+  - `src/tui_shell/app/cmd_gate_graph/actions.rs`
+  - `src/tui_shell/app/cmd_gate_graph/text_input.rs`
+  - `src/tui_shell/app/cmd_gate_graph/apply.rs`
+- Preserved command names, modal prompts, validation text, and gate-graph edit flows while isolating apply/edit orchestration from action handlers.
 
 ### E) Verification and Hygiene
 
