@@ -34,8 +34,16 @@ Progress notes:
 - Preserved public API surface used by CLI and TUI (`apply_resolution`, `validate_resolution`, `superposition_variants`, `superposition_variant_counts`, and validation structs).
 
 ### C) Remote Members TUI Decomposition
-- [ ] Split `src/tui_shell/app/remote_members.rs` by parse/state/effect concerns.
-- [ ] Preserve prompt flow and command behavior.
+- [x] Split `src/tui_shell/app/remote_members.rs` by parse/state/effect concerns.
+- [x] Preserve prompt flow and command behavior.
+
+Progress notes:
+- Replaced `src/tui_shell/app/remote_members.rs` with module directory:
+  - `src/tui_shell/app/remote_members/mod.rs`
+  - `src/tui_shell/app/remote_members/list.rs`
+  - `src/tui_shell/app/remote_members/member.rs`
+  - `src/tui_shell/app/remote_members/lane_member.rs`
+- Preserved command behaviors for `members`, `member`, and `lane-member` flows, including prompt-first behavior and legacy flag forms.
 
 ### D) Status TUI Decomposition
 - [ ] Split `src/tui_shell/status.rs` by transform/render helper concerns.
@@ -55,3 +63,7 @@ Progress notes:
     - `cargo nextest run resolve_validate phase6_e2e_resolve_superpositions`
   - Additional targeted test sweep passed:
     - `cargo test resolve_validate -- --nocapture`
+- Validation for `remote_members` decomposition:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - `cargo test --lib` passed (`15 passed`, `0 failed`)
