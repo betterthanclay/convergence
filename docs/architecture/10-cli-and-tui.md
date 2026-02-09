@@ -53,8 +53,8 @@ TUI key bindings (current):
   - `src/bin/converge-server.rs` is a thin bootstrap/router composition entrypoint.
   - `src/bin/converge_server/routes.rs` holds authenticated route registration.
   - `src/bin/converge_server/handlers_system.rs` holds auth middleware, healthz, and bootstrap.
-  - `src/bin/converge_server/handlers_identity.rs`, `handlers_repo.rs`, `handlers_gates.rs`, `handlers_objects.rs`, `handlers_publications.rs`, `handlers_release.rs`, `handlers_gc.rs` hold domain handlers.
-  - `src/bin/converge_server/persistence.rs`, `identity_store.rs`, `validators.rs`, `object_graph.rs`, `access.rs`, `http_error.rs`, `gate_graph_validation.rs` hold shared persistence/validation/error/domain helpers.
+  - `src/bin/converge_server/handlers_identity/`, `handlers_repo/`, `handlers_gates.rs`, `handlers_objects/`, `handlers_publications/`, `handlers_release/`, `handlers_gc/` hold domain handlers.
+  - `src/bin/converge_server/persistence/`, `identity_store.rs`, `validators.rs`, `object_graph/`, `access.rs`, `http_error.rs`, `gate_graph_validation/` hold shared persistence/validation/error/domain helpers.
 
 - TUI:
   - `src/tui_shell/app.rs` is orchestration/state and delegates behavior to focused modules under `src/tui_shell/app/` (command groups, rendering, event loop, parsing, resolution helpers).

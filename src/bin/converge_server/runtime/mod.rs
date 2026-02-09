@@ -10,47 +10,51 @@ use clap::Parser;
 use tokio::sync::RwLock;
 
 use super::handlers_system::{bootstrap, healthz};
-use super::identity_store::{
-    bootstrap_identity, hash_token, load_identity_from_disk, persist_identity_to_disk,
-};
+use super::identity_store::hash_token;
 use super::persistence::load_repos_from_disk;
 use super::routes::authed_router;
-use super::types::{AccessToken, AppState, User};
+use super::types::AppState;
+
+mod identity;
+mod shutdown;
+
+use self::identity::load_or_bootstrap_identity;
+use self::shutdown::shutdown_signal;
 
 #[derive(Parser)]
 #[command(name = "converge-server")]
 #[command(about = "Convergence central authority (development)", long_about = None)]
-struct Args {
+pub(super) struct Args {
     /// Address to listen on
     #[arg(long, default_value = "127.0.0.1:8080")]
-    addr: SocketAddr,
+    pub(super) addr: SocketAddr,
 
     /// Write bound address to this file (dev/test convenience)
     #[arg(long)]
-    addr_file: Option<PathBuf>,
+    pub(super) addr_file: Option<PathBuf>,
 
     /// Data directory (future use)
     #[arg(long, default_value = "./converge-data")]
-    data_dir: PathBuf,
+    pub(super) data_dir: PathBuf,
 
     /// Database URL (future use)
     #[arg(long)]
-    db_url: Option<String>,
+    pub(super) db_url: Option<String>,
 
     /// One-time bootstrap bearer token that allows `POST /bootstrap` to create the first admin.
     ///
     /// When set and no admin exists yet, the server will start with no users/tokens and require
     /// bootstrapping before any authenticated endpoints can be used.
     #[arg(long)]
-    bootstrap_token: Option<String>,
+    pub(super) bootstrap_token: Option<String>,
 
     /// Development user name
     #[arg(long, default_value = "dev")]
-    dev_user: String,
+    pub(super) dev_user: String,
 
     /// Development bearer token (bootstrap-only)
     #[arg(long, default_value = "dev")]
-    dev_token: String,
+    pub(super) dev_token: String,
 }
 
 pub(super) async fn run() -> Result<()> {
@@ -121,81 +125,4 @@ pub(super) async fn run() -> Result<()> {
         .context("server error")?;
 
     Ok(())
-}
-
-fn load_or_bootstrap_identity(
-    args: &Args,
-) -> Result<(HashMap<String, User>, HashMap<String, AccessToken>)> {
-    let (mut users, mut tokens) =
-        load_identity_from_disk(&args.data_dir).context("load identity")?;
-
-    if users.is_empty() || tokens.is_empty() {
-        if args.bootstrap_token.is_some() {
-            if !(users.is_empty() && tokens.is_empty()) {
-                anyhow::bail!(
-                    "identity store inconsistent (users/tokens missing); remove {} to re-bootstrap",
-                    args.data_dir.display()
-                );
-            }
-        } else {
-            let (u, t) = bootstrap_identity(&args.dev_user, &args.dev_token);
-            users.insert(u.id.clone(), u);
-            tokens.insert(t.id.clone(), t);
-            persist_identity_to_disk(&args.data_dir, &users, &tokens)
-                .context("persist identity")?;
-        }
-    }
-
-    Ok((users, tokens))
-}
-
-async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    fn args_with_data_dir(data_dir: PathBuf) -> Args {
-        Args {
-            addr: "127.0.0.1:0".parse().expect("parse socket addr"),
-            addr_file: None,
-            data_dir,
-            db_url: None,
-            bootstrap_token: None,
-            dev_user: "dev".to_string(),
-            dev_token: "dev-token".to_string(),
-        }
-    }
-
-    #[test]
-    fn load_or_bootstrap_identity_seeds_dev_identity_without_bootstrap_token() {
-        let temp = tempdir().expect("create temp dir");
-        let args = args_with_data_dir(temp.path().to_path_buf());
-
-        let (users, tokens) = load_or_bootstrap_identity(&args).expect("load identity");
-
-        assert_eq!(users.len(), 1);
-        assert_eq!(tokens.len(), 1);
-        assert!(users.values().any(|u| u.handle == "dev"));
-
-        let users_path = super::super::identity_store::identity_users_path(temp.path());
-        let tokens_path = super::super::identity_store::identity_tokens_path(temp.path());
-        assert!(users_path.exists(), "users file should be persisted");
-        assert!(tokens_path.exists(), "tokens file should be persisted");
-    }
-
-    #[test]
-    fn load_or_bootstrap_identity_keeps_store_empty_with_bootstrap_token() {
-        let temp = tempdir().expect("create temp dir");
-        let mut args = args_with_data_dir(temp.path().to_path_buf());
-        args.bootstrap_token = Some("bootstrap-secret".to_string());
-
-        let (users, tokens) = load_or_bootstrap_identity(&args).expect("load identity");
-
-        assert!(users.is_empty());
-        assert!(tokens.is_empty());
-    }
 }

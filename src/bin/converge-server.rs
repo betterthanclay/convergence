@@ -62,7 +62,7 @@ mod routes;
 #[path = "converge_server/types/mod.rs"]
 mod types;
 use self::types::*;
-#[path = "converge_server/runtime.rs"]
+#[path = "converge_server/runtime/mod.rs"]
 mod runtime;
 use self::runtime::run;
 

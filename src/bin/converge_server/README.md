@@ -4,6 +4,8 @@
 
 Key module groups:
 
+- Runtime wiring:
+  - `runtime/`: startup argument parsing, identity bootstrap/load, and graceful shutdown helpers.
 - Route and handlers:
   - `routes.rs`: authenticated route registration.
   - `handlers_system.rs`: auth middleware, health, bootstrap.
