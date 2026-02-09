@@ -1,5 +1,12 @@
 use super::*;
 
+fn bootstrap_conflict_message(v: &serde_json::Value) -> String {
+    v.get("error")
+        .and_then(|x| x.as_str())
+        .unwrap_or("already bootstrapped")
+        .to_string()
+}
+
 impl RemoteClient {
     pub fn whoami(&self) -> Result<WhoAmI> {
         let resp = self
@@ -41,11 +48,7 @@ impl RemoteClient {
         }
         if resp.status() == reqwest::StatusCode::CONFLICT {
             let v: serde_json::Value = resp.json().context("parse bootstrap error")?;
-            let msg = v
-                .get("error")
-                .and_then(|x| x.as_str())
-                .unwrap_or("already bootstrapped");
-            anyhow::bail!(msg.to_string());
+            anyhow::bail!(bootstrap_conflict_message(&v));
         }
 
         let out: BootstrapResponse = resp
@@ -73,5 +76,22 @@ impl RemoteClient {
             .json()
             .context("parse repo")?;
         Ok(repo)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_conflict_message_prefers_error_field() {
+        let v = serde_json::json!({ "error": "custom message" });
+        assert_eq!(bootstrap_conflict_message(&v), "custom message");
+    }
+
+    #[test]
+    fn bootstrap_conflict_message_falls_back_to_default() {
+        let v = serde_json::json!({ "detail": "ignored" });
+        assert_eq!(bootstrap_conflict_message(&v), "already bootstrapped");
     }
 }

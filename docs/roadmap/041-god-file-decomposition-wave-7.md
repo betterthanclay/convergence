@@ -49,7 +49,7 @@ Progress notes:
 
 - [x] Split `src/remote/identity.rs` into auth/session, user/token, and membership/permission helpers.
 - [x] Preserve request paths and auth/error handling behavior.
-- [ ] Add focused tests for extracted pure helpers where practical.
+- [x] Add focused tests for extracted pure helpers where practical.
 
 Progress notes:
 - Replaced `src/remote/identity.rs` with module directory:
@@ -58,6 +58,8 @@ Progress notes:
   - `src/remote/identity/users_tokens.rs`
   - `src/remote/identity/members_lanes.rs`
 - Preserved all existing `RemoteClient` identity/member/lane method names and HTTP endpoint behavior.
+- Added focused unit tests for extracted bootstrap conflict-message helper in:
+  - `src/remote/identity/auth_session.rs`
 
 ### D) TUI Remote Command Decomposition
 
