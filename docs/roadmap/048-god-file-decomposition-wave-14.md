@@ -44,8 +44,15 @@ Progress notes:
 - Preserved exported function names (`global_command_defs`, `local_root_command_defs`, `remote_root_command_defs`, `root_command_defs`) and all command metadata text.
 
 ### D) Publication Bundles Handler Decomposition
-- [ ] Split `src/bin/converge_server/handlers_publications/bundles.rs` by endpoint/helper concerns.
-- [ ] Preserve route signatures and response payloads.
+- [x] Split `src/bin/converge_server/handlers_publications/bundles.rs` by endpoint/helper concerns.
+- [x] Preserve route signatures and response payloads.
+
+Progress notes:
+- Replaced `src/bin/converge_server/handlers_publications/bundles.rs` with module directory:
+  - `src/bin/converge_server/handlers_publications/bundles/mod.rs`
+  - `src/bin/converge_server/handlers_publications/bundles/create_list_get.rs`
+  - `src/bin/converge_server/handlers_publications/bundles/approve.rs`
+- Preserved handler exports consumed by `handlers_publications/mod.rs` and maintained request/query structs used by route wrappers.
 
 ### E) Verification and Hygiene
 - [x] Run `cargo fmt`.
@@ -58,3 +65,8 @@ Progress notes:
   - `cargo fmt` passed
   - `cargo clippy --all-targets -- -D warnings` passed
   - `cargo test --lib` passed (`15 passed`, `0 failed`)
+- Validation for publication-bundles slice:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - `cargo test --lib` passed (`15 passed`, `0 failed`)
+  - `cargo test server_routes_smoke -- --nocapture` completed without failures (filter matched no tests in this run).
