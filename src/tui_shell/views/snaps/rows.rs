@@ -2,7 +2,8 @@ use ratatui::style::Style;
 use ratatui::widgets::ListItem;
 
 use super::super::super::fmt_ts_list;
-use super::{RenderCtx, SnapsView, head_style};
+use super::render::head_style;
+use super::{RenderCtx, SnapsView};
 
 pub(super) fn list_rows(view: &SnapsView, ctx: &RenderCtx) -> Vec<ListItem<'static>> {
     let mut rows = Vec::new();
