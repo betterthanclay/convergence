@@ -32,8 +32,15 @@ Progress notes:
 - Kept `RemoteClient` fetch entry points and `transfer.rs` helper imports stable via `pub(super)` re-exports from `fetch/mod.rs`.
 
 ### C) Remote Transfer Decomposition
-- [ ] Split `src/remote/transfer.rs` into upload/download concerns.
-- [ ] Preserve integrity checks and progress reporting behavior.
+- [x] Split `src/remote/transfer.rs` into upload/download concerns.
+- [x] Preserve integrity checks and progress reporting behavior.
+
+Progress notes:
+- Replaced `src/remote/transfer.rs` with module directory:
+  - `src/remote/transfer/mod.rs`
+  - `src/remote/transfer/upload.rs`
+  - `src/remote/transfer/publish.rs`
+- Kept `RemoteClient` public transfer APIs unchanged (`publish_*`, `upload_snap_objects`, `sync_snap`) with behavior-preserving method moves.
 
 ### D) Server Release Handler Decomposition
 - [ ] Split `src/bin/converge_server/handlers_release.rs` by endpoint concern.
@@ -51,3 +58,10 @@ Progress notes:
   - `cargo clippy --all-targets -- -D warnings` passed
   - `cargo nextest run remote::operations::repo_gate::tests::format_validation_error_limits_issue_lines` passed
   - `cargo test --lib` passed (`15 passed`, `0 failed`)
+- Validation for remote/transfer slice:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - Full `cargo nextest run` intermittently stalls after compile in this environment.
+  - Fallback targeted validation passed:
+    - `cargo test remote_client_modules_compose_across_core_flows -- --nocapture`
+    - `cargo test upload_integrity -- --nocapture`
