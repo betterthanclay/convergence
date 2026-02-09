@@ -46,8 +46,14 @@ Progress notes:
 - Preserved command behaviors for `members`, `member`, and `lane-member` flows, including prompt-first behavior and legacy flag forms.
 
 ### D) Status TUI Decomposition
-- [ ] Split `src/tui_shell/status.rs` by transform/render helper concerns.
-- [ ] Preserve status output fidelity.
+- [x] Split `src/tui_shell/status.rs` by transform/render helper concerns.
+- [x] Preserve status output fidelity.
+
+Progress notes:
+- Replaced `src/tui_shell/status.rs` with module root plus dedicated rename test file:
+  - `src/tui_shell/status/mod.rs`
+  - `src/tui_shell/status/rename_tests.rs`
+- Preserved status helper exports used by app/root views and kept rename detection tests intact.
 
 ### E) Verification and Hygiene
 - [x] Run `cargo fmt`.
@@ -64,6 +70,10 @@ Progress notes:
   - Additional targeted test sweep passed:
     - `cargo test resolve_validate -- --nocapture`
 - Validation for `remote_members` decomposition:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - `cargo test --lib` passed (`15 passed`, `0 failed`)
+- Validation for `status` decomposition:
   - `cargo fmt` passed
   - `cargo clippy --all-targets -- -D warnings` passed
   - `cargo test --lib` passed (`15 passed`, `0 failed`)
