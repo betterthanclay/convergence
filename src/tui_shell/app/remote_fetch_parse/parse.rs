@@ -51,10 +51,12 @@ pub(super) fn parse_tokens(args: &[String]) -> Result<ParsedFetchSpec, String> {
 }
 
 pub(super) fn apply_shorthands(parsed: &mut ParsedFetchSpec) -> Result<(), String> {
-    if parsed.spec.lane.is_some() && parsed.spec.user.is_none() && parsed.free.len() == 1 {
-        if let Some(free) = parsed.free.pop() {
-            parsed.spec.user = Some(free);
-        }
+    if parsed.spec.lane.is_some()
+        && parsed.spec.user.is_none()
+        && parsed.free.len() == 1
+        && let Some(free) = parsed.free.pop()
+    {
+        parsed.spec.user = Some(free);
     }
 
     if parsed.spec.snap_id.is_none()
@@ -63,10 +65,9 @@ pub(super) fn apply_shorthands(parsed: &mut ParsedFetchSpec) -> Result<(), Strin
         && parsed.spec.lane.is_none()
         && parsed.spec.user.is_none()
         && parsed.free.len() == 1
+        && let Some(free) = parsed.free.pop()
     {
-        if let Some(free) = parsed.free.pop() {
-            parsed.spec.snap_id = Some(free);
-        }
+        parsed.spec.snap_id = Some(free);
     }
 
     if !parsed.free.is_empty() {
