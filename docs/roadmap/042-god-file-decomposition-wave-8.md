@@ -35,8 +35,15 @@ Progress notes:
 - Updated server entry composition to load handlers from `handlers_objects/mod.rs`.
 
 ### C) Wizard Flow Decomposition
-- [ ] Split `src/tui_shell/wizard/member_flow.rs` into state transitions, validation, and side-effect helpers.
+- [x] Split `src/tui_shell/wizard/member_flow.rs` into state transitions, validation, and side-effect helpers.
 - [ ] Split `src/tui_shell/wizard/publish_sync_flow.rs` into parse/transition/effect helpers.
+
+Progress notes:
+- Replaced `src/tui_shell/wizard/member_flow.rs` with module directory:
+  - `src/tui_shell/wizard/member_flow/mod.rs`
+  - `src/tui_shell/wizard/member_flow/repo_member.rs`
+  - `src/tui_shell/wizard/member_flow/lane_member.rs`
+- Preserved wizard prompts, action parsing, and final remote-side effects for repo and lane membership flows.
 
 ### D) Verification and Hygiene
 - [x] Run `cargo fmt`.
@@ -49,3 +56,6 @@ Progress notes:
   - `cargo fmt` passed
   - `cargo clippy --all-targets -- -D warnings` passed
   - Targeted `nextest`/`cargo test` invocations for server integration tests were intermittently hanging in this environment after compile; full integration verification remains pending.
+- Validation for member-wizard split:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
