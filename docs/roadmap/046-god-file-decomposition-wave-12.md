@@ -44,8 +44,16 @@ Progress notes:
 - Preserved public traversal API re-exports used by object graph call sites.
 
 ### D) TUI Default Actions Decomposition
-- [ ] Split `src/tui_shell/app/default_actions.rs` by mode/intent concerns.
-- [ ] Preserve key bindings and actions.
+- [x] Split `src/tui_shell/app/default_actions.rs` by mode/intent concerns.
+- [x] Preserve key bindings and actions.
+
+Progress notes:
+- Replaced `src/tui_shell/app/default_actions.rs` with module directory:
+  - `src/tui_shell/app/default_actions/mod.rs`
+  - `src/tui_shell/app/default_actions/hints.rs`
+  - `src/tui_shell/app/default_actions/execute.rs`
+  - `src/tui_shell/app/default_actions/confirm.rs`
+- Preserved default hint rotation, action dispatch, destructive-action confirmation, and settings-specific confirmation text.
 
 ### E) Verification and Hygiene
 - [x] Run `cargo fmt`.
@@ -65,3 +73,7 @@ Progress notes:
   - `cargo clippy --all-targets -- -D warnings` passed
   - Targeted server contract test passed:
     - `cargo test server_api_contract -- --nocapture`
+- Validation for `default_actions` decomposition:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - `cargo test --lib` passed (`15 passed`, `0 failed`)
