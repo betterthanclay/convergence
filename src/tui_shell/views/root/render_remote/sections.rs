@@ -1,16 +1,8 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use crate::tui_shell::status::DashboardData;
 
-pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d: &DashboardData) {
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0)])
-        .split(area);
-
-    // Next actions (top row).
+pub(super) fn action_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut action_lines: Vec<Line<'static>> = Vec::new();
     if d.next_actions.is_empty() {
         action_lines.push(Line::from("(none)"));
@@ -19,28 +11,10 @@ pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d:
             action_lines.push(Line::from(format!("- {}", a)));
         }
     }
-    frame.render_widget(
-        Paragraph::new(action_lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title("Next")),
-        rows[0],
-    );
+    action_lines
+}
 
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(rows[1]);
-
-    let left = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(0)])
-        .split(cols[0]);
-    let right = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(0)])
-        .split(cols[1]);
-
-    // Inbox.
+pub(super) fn inbox_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut inbox_lines: Vec<Line<'static>> = Vec::new();
     inbox_lines.push(Line::from(format!(
         "{} total  {} pending  {} resolved",
@@ -55,14 +29,10 @@ pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d:
     if let Some((sid, ts)) = &d.latest_publication {
         inbox_lines.push(Line::from(format!("latest: {} {}", sid, ts)));
     }
-    frame.render_widget(
-        Paragraph::new(inbox_lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title("Inbox")),
-        left[0],
-    );
+    inbox_lines
+}
 
-    // Bundles.
+pub(super) fn bundle_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut bundle_lines: Vec<Line<'static>> = Vec::new();
     bundle_lines.push(Line::from(format!(
         "{} total  {} promotable  {} blocked",
@@ -83,14 +53,10 @@ pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d:
     if d.pinned_bundles > 0 {
         bundle_lines.push(Line::from(format!("pinned: {}", d.pinned_bundles)));
     }
-    frame.render_widget(
-        Paragraph::new(bundle_lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title("Bundles")),
-        left[1],
-    );
+    bundle_lines
+}
 
-    // Gates / scope.
+pub(super) fn gate_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut gate_lines: Vec<Line<'static>> = Vec::new();
     if let Some(h) = &d.healthz {
         gate_lines.push(Line::from(format!("healthz: {}", h)));
@@ -104,14 +70,10 @@ pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d:
             gate_lines.push(Line::from(format!("{} {}", gate, bid)));
         }
     }
-    frame.render_widget(
-        Paragraph::new(gate_lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title("Gates")),
-        right[0],
-    );
+    gate_lines
+}
 
-    // Releases.
+pub(super) fn release_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut rel_lines: Vec<Line<'static>> = Vec::new();
     if d.releases_total == 0 {
         rel_lines.push(Line::from("(none)"));
@@ -124,10 +86,5 @@ pub(super) fn render_remote_dashboard(frame: &mut ratatui::Frame, area: Rect, d:
             rel_lines.push(Line::from(format!("{} {} {}", ch, bid, ts)));
         }
     }
-    frame.render_widget(
-        Paragraph::new(rel_lines)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title("Releases")),
-        right[1],
-    );
+    rel_lines
 }
