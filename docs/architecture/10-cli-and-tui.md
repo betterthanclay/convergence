@@ -45,14 +45,14 @@ TUI key bindings (current):
   - `src/cli_exec.rs` dispatches command execution.
   - `src/cli_exec/local.rs` handles local snap/store actions.
   - `src/cli_exec/identity.rs` handles auth/user/member/lane actions.
-  - `src/cli_exec/remote_admin.rs` handles remote config/repo/gate-graph actions.
+  - `src/cli_exec/remote_admin/` handles remote config/repo/gate-graph actions.
   - `src/cli_exec/delivery.rs` handles publish/sync/fetch/bundle/promote/pin/status flows.
   - `src/cli_exec/release_resolve.rs` handles release and resolution workflows.
 
 - Server entrypoint:
   - `src/bin/converge-server.rs` is a thin bootstrap/router composition entrypoint.
   - `src/bin/converge_server/routes.rs` holds authenticated route registration.
-  - `src/bin/converge_server/handlers_system.rs` holds auth middleware, healthz, and bootstrap.
+  - `src/bin/converge_server/handlers_system/` holds auth middleware, healthz, and bootstrap.
   - `src/bin/converge_server/handlers_identity/`, `handlers_repo/`, `handlers_gates.rs`, `handlers_objects/`, `handlers_publications/`, `handlers_release/`, `handlers_gc/` hold domain handlers.
   - `src/bin/converge_server/persistence/`, `identity_store.rs`, `validators.rs`, `object_graph/`, `access.rs`, `http_error.rs`, `gate_graph_validation/` hold shared persistence/validation/error/domain helpers.
 

@@ -36,7 +36,7 @@ mod handlers_identity;
 use self::handlers_identity::*;
 #[path = "converge_server/handlers_repo/mod.rs"]
 mod handlers_repo;
-#[path = "converge_server/handlers_system.rs"]
+#[path = "converge_server/handlers_system/mod.rs"]
 mod handlers_system;
 use self::handlers_repo::*;
 #[path = "converge_server/handlers_gates.rs"]

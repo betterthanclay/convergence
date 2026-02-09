@@ -8,7 +8,7 @@ Key module groups:
   - `runtime/`: startup argument parsing, identity bootstrap/load, and graceful shutdown helpers.
 - Route and handlers:
   - `routes.rs`: authenticated route registration.
-  - `handlers_system.rs`: auth middleware, health, bootstrap.
+  - `handlers_system/`: auth middleware, health, bootstrap.
   - `handlers_identity/`, `handlers_repo/`, `handlers_gates.rs`, `handlers_objects/`, `handlers_publications/`, `handlers_release/`, `handlers_gc/`.
 - Shared server helpers:
   - `persistence/`, `identity_store.rs`, `validators.rs`, `object_graph/`.
