@@ -42,7 +42,7 @@ use self::handlers_repo::*;
 #[path = "converge_server/handlers_gates.rs"]
 mod handlers_gates;
 use self::handlers_gates::*;
-#[path = "converge_server/handlers_objects.rs"]
+#[path = "converge_server/handlers_objects/mod.rs"]
 mod handlers_objects;
 use self::handlers_objects::*;
 #[path = "converge_server/handlers_publications/mod.rs"]
