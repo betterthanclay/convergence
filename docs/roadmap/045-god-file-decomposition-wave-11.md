@@ -1,0 +1,57 @@
+# Phase 045: God-File Decomposition (Wave 11)
+
+## Goal
+
+Continue reducing high-LOC hotspots in core resolution and TUI interaction code while preserving behavior and command/output compatibility.
+
+## Scope
+
+Primary Wave 11 targets:
+- `src/resolve.rs` (~316 LOC)
+- `src/tui_shell/app/remote_members.rs` (~313 LOC)
+- `src/tui_shell/status.rs` (~293 LOC)
+
+## Tasks
+
+### A) Baseline and Boundaries
+- [x] Capture target order and split boundaries.
+
+Progress notes:
+- Start with `resolve.rs` (core data/validation/apply concerns are separable).
+- Follow with TUI slices (`remote_members.rs`, then `status.rs`).
+
+### B) Resolve Module Decomposition
+- [x] Split `src/resolve.rs` into focused submodules for model/validation/apply behavior.
+- [x] Preserve public APIs and resolution semantics.
+
+Progress notes:
+- Replaced `src/resolve.rs` with module directory:
+  - `src/resolve/mod.rs`
+  - `src/resolve/types.rs`
+  - `src/resolve/variants.rs`
+  - `src/resolve/validate.rs`
+  - `src/resolve/apply.rs`
+- Preserved public API surface used by CLI and TUI (`apply_resolution`, `validate_resolution`, `superposition_variants`, `superposition_variant_counts`, and validation structs).
+
+### C) Remote Members TUI Decomposition
+- [ ] Split `src/tui_shell/app/remote_members.rs` by parse/state/effect concerns.
+- [ ] Preserve prompt flow and command behavior.
+
+### D) Status TUI Decomposition
+- [ ] Split `src/tui_shell/status.rs` by transform/render helper concerns.
+- [ ] Preserve status output fidelity.
+
+### E) Verification and Hygiene
+- [x] Run `cargo fmt`.
+- [x] Run `cargo clippy --all-targets -- -D warnings`.
+- [x] Run `cargo nextest run` (or document fallback if environment stalls persist).
+- [x] Keep this phase doc updated as slices land.
+
+Progress notes:
+- Validation for `resolve` decomposition:
+  - `cargo fmt` passed
+  - `cargo clippy --all-targets -- -D warnings` passed
+  - Targeted `nextest` passed:
+    - `cargo nextest run resolve_validate phase6_e2e_resolve_superpositions`
+  - Additional targeted test sweep passed:
+    - `cargo test resolve_validate -- --nocapture`
