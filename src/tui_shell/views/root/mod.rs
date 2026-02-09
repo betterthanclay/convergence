@@ -47,7 +47,6 @@ impl RootView {
             change_summary: ChangeSummary::default(),
             baseline_compact: None,
             change_keys: Vec::new(),
-
             remote_dashboard: None,
             remote_err: None,
         }
@@ -63,25 +62,7 @@ impl RootView {
             (RootContext::Local, Some(ws)) => {
                 local_status_lines(ws, ctx).unwrap_or_else(|e| vec![format!("status: {:#}", e)])
             }
-            (RootContext::Remote, Some(ws)) => {
-                if let Some(lines) = self.remote_auth_block_lines.clone() {
-                    lines
-                } else {
-                    match dashboard_data(ws, ctx) {
-                        Ok(d) => {
-                            self.remote_dashboard = Some(d);
-                            self.remote_err = None;
-                            Vec::new()
-                        }
-                        Err(err) => {
-                            self.remote_dashboard = None;
-                            let s = sanitize_dashboard_err(&format!("{:#}", err));
-                            self.remote_err = Some(s.clone());
-                            vec![s]
-                        }
-                    }
-                }
-            }
+            (RootContext::Remote, Some(ws)) => self.refresh_remote_lines(ws, ctx),
         };
 
         if self.ctx == RootContext::Local {
@@ -98,6 +79,25 @@ impl RootView {
                 .lines
                 .iter()
                 .any(|l| l.to_lowercase().contains("remote repo not found"))
+    }
+
+    fn refresh_remote_lines(&mut self, ws: &Workspace, ctx: &RenderCtx) -> Vec<String> {
+        if let Some(lines) = self.remote_auth_block_lines.clone() {
+            return lines;
+        }
+        match dashboard_data(ws, ctx) {
+            Ok(dashboard) => {
+                self.remote_dashboard = Some(dashboard);
+                self.remote_err = None;
+                Vec::new()
+            }
+            Err(err) => {
+                self.remote_dashboard = None;
+                let s = sanitize_dashboard_err(&format!("{:#}", err));
+                self.remote_err = Some(s.clone());
+                vec![s]
+            }
+        }
     }
 }
 
@@ -184,7 +184,6 @@ impl View for RootView {
                     return;
                 }
 
-                // Fallback error rendering.
                 let err = self.remote_err.as_deref().unwrap_or("dashboard: error");
                 frame.render_widget(
                     Paragraph::new(vec![Line::from(err)])
