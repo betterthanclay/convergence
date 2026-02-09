@@ -5,7 +5,9 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use super::super::{RenderCtx, UiMode, View, fmt_ts_list, fmt_ts_ui, render_view_chrome};
+use super::super::{RenderCtx, UiMode, View, render_view_chrome};
+
+mod render;
 
 #[derive(Debug)]
 pub(in crate::tui_shell) struct ReleasesView {
@@ -60,16 +62,10 @@ impl View for ReleasesView {
             state.select(Some(self.selected.min(self.items.len().saturating_sub(1))));
         }
 
-        let mut rows = Vec::new();
-        for r in &self.items {
-            let short = r.bundle_id.chars().take(8).collect::<String>();
-            rows.push(ListItem::new(format!(
-                "{} {} {}",
-                r.channel,
-                short,
-                fmt_ts_list(&r.released_at, ctx)
-            )));
-        }
+        let mut rows: Vec<ListItem> = render::release_rows(&self.items, ctx)
+            .into_iter()
+            .map(ListItem::new)
+            .collect();
         if rows.is_empty() {
             rows.push(ListItem::new("(empty)"));
         }
@@ -83,27 +79,10 @@ impl View for ReleasesView {
             .highlight_style(Style::default().bg(Color::DarkGray));
         frame.render_stateful_widget(list, parts[0], &mut state);
 
-        let details = if self.items.is_empty() {
-            vec![Line::from("(no selection)")]
-        } else {
-            let idx = self.selected.min(self.items.len().saturating_sub(1));
-            let r = &self.items[idx];
-            let mut out = Vec::new();
-            out.push(Line::from(format!("channel: {}", r.channel)));
-            out.push(Line::from(format!("bundle: {}", r.bundle_id)));
-            out.push(Line::from(format!("scope: {}", r.scope)));
-            out.push(Line::from(format!("gate: {}", r.gate)));
-            out.push(Line::from(format!(
-                "released_at: {}",
-                fmt_ts_ui(&r.released_at)
-            )));
-            out.push(Line::from(format!("released_by: {}", r.released_by)));
-            if let Some(n) = &r.notes {
-                out.push(Line::from(""));
-                out.push(Line::from(format!("notes: {}", n)));
-            }
-            out
-        };
+        let details: Vec<Line> = render::release_details(&self.items, self.selected)
+            .into_iter()
+            .map(Line::from)
+            .collect();
         frame.render_widget(Paragraph::new(details).wrap(Wrap { trim: false }), parts[1]);
     }
 }
