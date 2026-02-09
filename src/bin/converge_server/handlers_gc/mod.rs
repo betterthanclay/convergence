@@ -2,7 +2,12 @@
 
 use super::*;
 
+mod prune;
+mod roots;
 mod sweep;
+
+use self::prune::prune_release_history;
+use self::roots::collect_retained_roots;
 
 #[derive(Debug, serde::Deserialize)]
 pub(super) struct GcQuery {
@@ -40,131 +45,26 @@ pub(super) async fn gc_repo(
         )));
     }
 
-    // Optional release history pruning.
-    let releases_before = repo.releases.len();
-    let mut pruned_releases_keep_last = 0usize;
-    if let Some(keep_last) = q.prune_releases_keep_last {
-        if keep_last == 0 {
-            return Err(bad_request(anyhow::anyhow!(
-                "prune_releases_keep_last must be >= 1"
-            )));
-        }
+    let pruned_releases_keep_last = prune_release_history(repo, q.prune_releases_keep_last)?;
+    let retained = collect_retained_roots(state.as_ref(), &repo_id, repo)?;
 
-        let mut by_channel: HashMap<String, Vec<Release>> = HashMap::new();
-        for r in repo.releases.clone() {
-            by_channel.entry(r.channel.clone()).or_default().push(r);
-        }
-
-        let mut kept: Vec<Release> = Vec::new();
-        for (_ch, mut rs) in by_channel {
-            rs.sort_by(|a, b| b.released_at.cmp(&a.released_at));
-            rs.truncate(keep_last);
-            kept.extend(rs);
-        }
-        kept.sort_by(|a, b| b.released_at.cmp(&a.released_at));
-        pruned_releases_keep_last = releases_before.saturating_sub(kept.len());
-        repo.releases = kept;
-    }
-
-    // Retention roots: pinned bundles, releases, and current promotion-state pointers.
-    let mut keep_bundles: HashSet<String> = repo.pinned_bundles.iter().cloned().collect();
-    for r in &repo.releases {
-        keep_bundles.insert(r.bundle_id.clone());
-    }
-    for per_scope in repo.promotion_state.values() {
-        for bid in per_scope.values() {
-            keep_bundles.insert(bid.clone());
-        }
-    }
-
-    let mut keep_publications: HashSet<String> = HashSet::new();
-    let mut keep_snaps: HashSet<String> = HashSet::new();
-    let mut keep_blobs: HashSet<String> = HashSet::new();
-    let mut keep_manifests: HashSet<String> = HashSet::new();
-    let mut keep_recipes: HashSet<String> = HashSet::new();
-
-    let mut bundle_roots: Vec<String> = Vec::new();
-    for bid in &keep_bundles {
-        let bundle = if let Some(b) = repo.bundles.iter().find(|b| b.id == *bid) {
-            b.clone()
-        } else {
-            load_bundle_from_disk(state.as_ref(), &repo_id, bid)?
-        };
-
-        bundle_roots.push(bundle.root_manifest.clone());
-        for pid in bundle.input_publications {
-            keep_publications.insert(pid);
-        }
-    }
-
-    for p in &repo.publications {
-        if keep_publications.contains(&p.id) {
-            keep_snaps.insert(p.snap_id.clone());
-        }
-    }
-
-    // Lane heads are unpublished collaboration roots.
-    for lane in repo.lanes.values() {
-        for h in lane.heads.values() {
-            keep_snaps.insert(h.snap_id.clone());
-        }
-
-        for hist in lane.head_history.values() {
-            for h in hist {
-                keep_snaps.insert(h.snap_id.clone());
-            }
-        }
-    }
-
-    // Collect objects from kept bundle roots.
-    for root in &bundle_roots {
-        collect_objects_from_manifest_tree(
-            state.as_ref(),
-            &repo_id,
-            root,
-            &mut keep_blobs,
-            &mut keep_manifests,
-            &mut keep_recipes,
-        )?;
-    }
-
-    // Collect objects from kept snaps (provenance roots).
-    for sid in keep_snaps.clone() {
-        let path = repo_data_dir(state.as_ref(), &repo_id)
-            .join("objects/snaps")
-            .join(format!("{}.json", sid));
-        if !path.exists() {
-            continue;
-        }
-        let bytes = std::fs::read(&path)
-            .with_context(|| format!("read {}", path.display()))
-            .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
-        let snap: converge::model::SnapRecord =
-            serde_json::from_slice(&bytes).map_err(|e| internal_error(anyhow::anyhow!(e)))?;
-        collect_objects_from_manifest_tree(
-            state.as_ref(),
-            &repo_id,
-            snap.root_manifest.as_str(),
-            &mut keep_blobs,
-            &mut keep_manifests,
-            &mut keep_recipes,
-        )?;
-    }
-
-    // Sweep objects.
     let objects_root = repo_data_dir(state.as_ref(), &repo_id).join("objects");
-    let (deleted_blobs, kept_blobs_count) =
-        sweep::sweep_ids(&objects_root.join("blobs"), None, &keep_blobs, q.dry_run)?;
+    let (deleted_blobs, kept_blobs_count) = sweep::sweep_ids(
+        &objects_root.join("blobs"),
+        None,
+        &retained.keep_blobs,
+        q.dry_run,
+    )?;
     let (deleted_manifests, kept_manifests_count) = sweep::sweep_ids(
         &objects_root.join("manifests"),
         Some("json"),
-        &keep_manifests,
+        &retained.keep_manifests,
         q.dry_run,
     )?;
     let (deleted_recipes, kept_recipes_count) = sweep::sweep_ids(
         &objects_root.join("recipes"),
         Some("json"),
-        &keep_recipes,
+        &retained.keep_recipes,
         q.dry_run,
     )?;
 
@@ -172,7 +72,7 @@ pub(super) async fn gc_repo(
         sweep::sweep_ids(
             &objects_root.join("snaps"),
             Some("json"),
-            &keep_snaps,
+            &retained.keep_snaps,
             q.dry_run,
         )?
     } else {
@@ -183,18 +83,17 @@ pub(super) async fn gc_repo(
         sweep::sweep_ids(
             &repo_data_dir(state.as_ref(), &repo_id).join("bundles"),
             Some("json"),
-            &keep_bundles,
+            &retained.keep_bundles,
             q.dry_run,
         )?
     } else {
         (0, 0)
     };
 
-    // Sweep releases (metadata).
     let keep_release_ids: HashSet<String> = repo
         .releases
         .iter()
-        .filter(|r| keep_bundles.contains(&r.bundle_id))
+        .filter(|r| retained.keep_bundles.contains(&r.bundle_id))
         .map(|r| r.id.clone())
         .collect();
 
@@ -210,13 +109,15 @@ pub(super) async fn gc_repo(
     };
 
     if q.prune_metadata && !q.dry_run {
-        repo.bundles.retain(|b| keep_bundles.contains(&b.id));
-        repo.pinned_bundles.retain(|b| keep_bundles.contains(b));
+        repo.bundles
+            .retain(|b| retained.keep_bundles.contains(&b.id));
+        repo.pinned_bundles
+            .retain(|bundle_id| retained.keep_bundles.contains(bundle_id));
         repo.releases
-            .retain(|r| keep_bundles.contains(&r.bundle_id));
+            .retain(|r| retained.keep_bundles.contains(&r.bundle_id));
         repo.publications
-            .retain(|p| keep_publications.contains(&p.id));
-        repo.snaps = keep_snaps.clone();
+            .retain(|p| retained.keep_publications.contains(&p.id));
+        repo.snaps = retained.keep_snaps.clone();
         persist_repo(state.as_ref(), repo).map_err(internal_error)?;
     }
 
@@ -227,10 +128,10 @@ pub(super) async fn gc_repo(
             "releases_keep_last": pruned_releases_keep_last
         },
         "kept": {
-            "bundles": keep_bundles.len(),
+            "bundles": retained.keep_bundles.len(),
             "releases": kept_releases_count,
-            "publications": keep_publications.len(),
-            "snaps": keep_snaps.len(),
+            "publications": retained.keep_publications.len(),
+            "snaps": retained.keep_snaps.len(),
             "blobs": kept_blobs_count,
             "manifests": kept_manifests_count,
             "recipes": kept_recipes_count
