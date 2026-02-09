@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod sweep;
+
 #[derive(Debug, serde::Deserialize)]
 pub(super) struct GcQuery {
     #[serde(default = "default_true")]
@@ -149,74 +151,17 @@ pub(super) async fn gc_repo(
         )?;
     }
 
-    fn sweep_ids(
-        dir: &std::path::Path,
-        ext: Option<&str>,
-        keep: &HashSet<String>,
-        dry_run: bool,
-    ) -> Result<(usize, usize), Response> {
-        if !dir.is_dir() {
-            return Ok((0, 0));
-        }
-        let mut deleted = 0;
-        let mut kept = 0;
-        for entry in std::fs::read_dir(dir)
-            .with_context(|| format!("read {}", dir.display()))
-            .map_err(|e| internal_error(anyhow::anyhow!(e)))?
-        {
-            let entry = entry
-                .with_context(|| format!("read {} entry", dir.display()))
-                .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-
-            let id = match ext {
-                None => path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string()),
-                Some(e) => {
-                    if path.extension().and_then(|s| s.to_str()) != Some(e) {
-                        continue;
-                    }
-                    path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .map(|s| s.to_string())
-                }
-            };
-            let Some(id) = id else {
-                continue;
-            };
-            if id.len() != 64 {
-                continue;
-            }
-            if keep.contains(&id) {
-                kept += 1;
-                continue;
-            }
-            deleted += 1;
-            if !dry_run {
-                std::fs::remove_file(&path)
-                    .with_context(|| format!("remove {}", path.display()))
-                    .map_err(|e| internal_error(anyhow::anyhow!(e)))?;
-            }
-        }
-        Ok((deleted, kept))
-    }
-
     // Sweep objects.
     let objects_root = repo_data_dir(state.as_ref(), &repo_id).join("objects");
     let (deleted_blobs, kept_blobs_count) =
-        sweep_ids(&objects_root.join("blobs"), None, &keep_blobs, q.dry_run)?;
-    let (deleted_manifests, kept_manifests_count) = sweep_ids(
+        sweep::sweep_ids(&objects_root.join("blobs"), None, &keep_blobs, q.dry_run)?;
+    let (deleted_manifests, kept_manifests_count) = sweep::sweep_ids(
         &objects_root.join("manifests"),
         Some("json"),
         &keep_manifests,
         q.dry_run,
     )?;
-    let (deleted_recipes, kept_recipes_count) = sweep_ids(
+    let (deleted_recipes, kept_recipes_count) = sweep::sweep_ids(
         &objects_root.join("recipes"),
         Some("json"),
         &keep_recipes,
@@ -224,7 +169,7 @@ pub(super) async fn gc_repo(
     )?;
 
     let (deleted_snaps, _kept_snaps_count) = if q.prune_metadata {
-        sweep_ids(
+        sweep::sweep_ids(
             &objects_root.join("snaps"),
             Some("json"),
             &keep_snaps,
@@ -235,7 +180,7 @@ pub(super) async fn gc_repo(
     };
 
     let (deleted_bundles, _kept_bundles_count) = if q.prune_metadata {
-        sweep_ids(
+        sweep::sweep_ids(
             &repo_data_dir(state.as_ref(), &repo_id).join("bundles"),
             Some("json"),
             &keep_bundles,
@@ -254,7 +199,7 @@ pub(super) async fn gc_repo(
         .collect();
 
     let (deleted_releases, kept_releases_count) = if q.prune_metadata {
-        sweep_ids(
+        sweep::sweep_ids(
             &repo_data_dir(state.as_ref(), &repo_id).join("releases"),
             Some("json"),
             &keep_release_ids,
