@@ -28,7 +28,7 @@ use self::validators::*;
 #[path = "converge_server/http_error.rs"]
 mod http_error;
 use self::http_error::*;
-#[path = "converge_server/gate_graph_validation.rs"]
+#[path = "converge_server/gate_graph_validation/mod.rs"]
 mod gate_graph_validation;
 use self::gate_graph_validation::*;
 #[path = "converge_server/handlers_identity/mod.rs"]
