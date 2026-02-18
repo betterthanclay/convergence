@@ -9,22 +9,32 @@ impl App {
             .unwrap_or_default()
     }
 
+    fn default_release_channel(profile: crate::model::WorkflowProfile) -> &'static str {
+        match profile {
+            crate::model::WorkflowProfile::Software => "main",
+            crate::model::WorkflowProfile::Daw => "master",
+            crate::model::WorkflowProfile::GameAssets => "internal",
+        }
+    }
+
     pub(in crate::tui_shell) fn start_release_wizard(&mut self, bundle_id: String) {
+        let profile = self.current_workflow_profile();
+        let default_channel = Self::default_release_channel(profile).to_string();
         self.release_wizard = Some(ReleaseWizard {
             bundle_id,
-            channel: "main".to_string(),
+            channel: default_channel.clone(),
             notes: None,
         });
-        let profile = self.current_workflow_profile();
 
         self.open_text_input_modal(
             "Release",
             "channel> ",
             TextInputAction::ReleaseChannel,
-            Some("main".to_string()),
+            Some(default_channel.clone()),
             vec![
                 "Release channel name (example: main).".to_string(),
                 format!("profile: {}", profile.as_str()),
+                format!("default: {}", default_channel),
                 profile.release_hint().to_string(),
                 "Esc cancels.".to_string(),
             ],
