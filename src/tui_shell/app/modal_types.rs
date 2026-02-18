@@ -9,6 +9,7 @@ pub(in crate::tui_shell) enum PendingAction {
 #[derive(Debug, Clone)]
 pub(in crate::tui_shell) enum TextInputAction {
     ChunkingSet,
+    WorkflowProfileSet,
     RetentionKeepLast,
     RetentionKeepDays,
 
@@ -73,10 +74,7 @@ pub(in crate::tui_shell) enum TextInputAction {
     GateGraphEditUpstream,
     GateGraphSetApprovals,
 
-    BrowseScope,
-    BrowseGate,
-    BrowseFilter,
-    BrowseLimit,
+    BrowseQuery,
 }
 
 #[derive(Debug)]

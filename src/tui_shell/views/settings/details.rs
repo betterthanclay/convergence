@@ -14,6 +14,17 @@ pub(super) fn detail_lines(view: &SettingsView, ctx: &RenderCtx) -> Vec<Line<'st
                     Line::from(format!("current: {}", ctx.ts_mode.label())),
                 ]
             }
+            SettingsItemKind::WorkflowProfileSet => {
+                let mut out = vec![Line::from("Set workflow profile for remote guidance")];
+                if let Some(snapshot) = view.snapshot {
+                    out.push(Line::from(format!(
+                        "current: {}",
+                        snapshot.workflow_profile.as_str()
+                    )));
+                }
+                out.push(Line::from("Enter: edit (software | daw | game-assets)"));
+                out
+            }
             SettingsItemKind::ChunkingShow => {
                 let mut out = vec![Line::from("Show chunking settings")];
                 if let Some(snapshot) = view.snapshot {

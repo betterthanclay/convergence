@@ -25,6 +25,12 @@ Planned verbs (not yet implemented):
 - `converge` (no args) opens an interactive TUI.
 - TUI is a client of the same underlying commands/APIs.
 
+## CLI/TUI parity notes
+
+- CLI is the full, scriptable surface area.
+- TUI intentionally exposes a curated subset optimized for interactive operation, with guided prompts for common flows.
+- When command shapes differ between surfaces, CLI semantics remain the canonical reference.
+
 TUI capabilities (current):
 - Overview: remote config, gate graph, promotion state
 - Inbox: publications for configured scope+gate; quick filter; create bundle
@@ -32,11 +38,23 @@ TUI capabilities (current):
 - Superpositions: inspect conflicts; choose variants; validate/apply resolution (optionally publish)
 
 TUI key bindings (current):
-- global: `q`/`esc` quit
-- overview: `i` inbox, `b` bundles, `r` reload
-- inbox: `space` select, `c` create bundle, `/` filter, `r` refresh
-- bundles: `a` approve, `p` promote (with gate chooser if needed), `s` superpositions
-- superpositions: `n` next missing, `f` next invalid, `v` validation, `1-9` pick, `0` clear, `a` apply, `p` apply+publish, `r` refresh
+- global:
+  - `q` quit
+  - `Esc` clear input; if already clear, go back one view; at root, quit
+  - `/` open command suggestions for current context
+  - `Enter` with empty input runs the primary suggested action
+- root:
+  - `Tab` toggles local/remote root contexts
+  - `Left`/`Right` rotates suggested default actions
+- command input:
+  - `Up`/`Down` selects suggestions (or history when no suggestions)
+  - `Tab` autocompletes the selected suggestion
+  - command lines may be entered with or without a leading `/`
+- superpositions:
+  - `Alt+1..9` pick variant index for selected path
+  - `Alt+0` clear selected path decision
+  - `Alt+n` jump to next missing decision
+  - `Alt+f` jump to next invalid decision
 
 ## Current code organization
 

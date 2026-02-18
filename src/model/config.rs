@@ -12,6 +12,52 @@ pub struct WorkspaceConfig {
 
     #[serde(default)]
     pub retention: Option<RetentionConfig>,
+
+    #[serde(default)]
+    pub workflow_profile: WorkflowProfile,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowProfile {
+    #[default]
+    Software,
+    Daw,
+    GameAssets,
+}
+
+impl WorkflowProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkflowProfile::Software => "software",
+            WorkflowProfile::Daw => "daw",
+            WorkflowProfile::GameAssets => "game-assets",
+        }
+    }
+
+    pub fn release_hint(self) -> &'static str {
+        match self {
+            WorkflowProfile::Software => {
+                "hint: choose the channel that represents your deployment track"
+            }
+            WorkflowProfile::Daw => "hint: use release for mastered mixdown candidates",
+            WorkflowProfile::GameAssets => {
+                "hint: use release for approved build-ready asset bundles"
+            }
+        }
+    }
+
+    pub fn flow_hint(self) -> &'static str {
+        match self {
+            WorkflowProfile::Software => "flow: publish -> bundle -> promote -> release",
+            WorkflowProfile::Daw => {
+                "flow: publish session/assets -> bundle candidate -> promote approvals -> release mastered mixdown"
+            }
+            WorkflowProfile::GameAssets => {
+                "flow: publish assets -> bundle set -> promote gate checks -> release build-ready pack"
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

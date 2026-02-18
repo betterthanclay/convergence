@@ -5,7 +5,8 @@ mod resolution;
 mod snap;
 
 pub use self::config::{
-    ChunkingConfig, LaneSyncRecord, RemoteConfig, RetentionConfig, WorkspaceConfig, WorkspaceState,
+    ChunkingConfig, LaneSyncRecord, RemoteConfig, RetentionConfig, WorkflowProfile,
+    WorkspaceConfig, WorkspaceState,
 };
 pub use self::ids::ObjectId;
 pub use self::manifest::{

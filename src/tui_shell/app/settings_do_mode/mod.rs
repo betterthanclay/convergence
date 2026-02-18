@@ -1,6 +1,7 @@
 use super::*;
 
 mod chunking;
+mod profile;
 mod retention;
 mod toggles;
 
@@ -16,6 +17,7 @@ impl App {
 
         match kind {
             SettingsItemKind::ToggleTimestamps => toggles::toggle_timestamps(self),
+            SettingsItemKind::WorkflowProfileSet => profile::set(self),
             SettingsItemKind::ChunkingShow => chunking::show(self),
             SettingsItemKind::ChunkingSet => chunking::set(self),
             SettingsItemKind::ChunkingReset => chunking::reset(self),

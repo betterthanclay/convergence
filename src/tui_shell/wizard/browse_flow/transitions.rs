@@ -1,36 +1,70 @@
 use super::*;
 use crate::tui_shell::App;
 
-fn open_gate_prompt(app: &mut App) {
-    let initial = app.browse_wizard.as_ref().map(|w| w.gate.clone());
-    app.open_text_input_modal(
-        "Browse",
-        "gate> ",
-        TextInputAction::BrowseGate,
-        initial,
-        vec!["Gate id (Enter keeps current).".to_string()],
-    );
+fn parse_limit(raw: &str) -> Result<Option<usize>, String> {
+    let v = raw.trim();
+    if v.is_empty() || v.eq_ignore_ascii_case("none") {
+        return Ok(None);
+    }
+    match v.parse::<usize>() {
+        Ok(n) => Ok(Some(n)),
+        Err(_) => Err("invalid limit (expected number or none)".to_string()),
+    }
 }
 
-fn open_filter_prompt(app: &mut App) {
-    let initial = app.browse_wizard.as_ref().and_then(|w| w.filter.clone());
-    app.open_text_input_modal(
-        "Browse",
-        "filter (blank=none)> ",
-        TextInputAction::BrowseFilter,
-        initial,
-        vec!["Optional filter query".to_string()],
-    );
+fn parse_filter(raw: &str) -> Option<String> {
+    let v = raw.trim();
+    if v.is_empty() || v.eq_ignore_ascii_case("none") {
+        None
+    } else {
+        Some(v.to_string())
+    }
 }
 
-fn open_limit_prompt(app: &mut App, initial: Option<String>, help: Vec<String>) {
-    app.open_text_input_modal(
-        "Browse",
-        "limit (blank=none)> ",
-        TextInputAction::BrowseLimit,
-        initial,
-        help,
-    );
+fn apply_compact_query(w: &mut BrowseWizard, raw: &str) -> Result<(), String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(());
+    }
+
+    if raw.contains('=') {
+        for part in raw.split_whitespace() {
+            let Some((k, v)) = part.split_once('=') else {
+                return Err(format!("invalid field: {}", part));
+            };
+            match k {
+                "scope" => {
+                    if !v.is_empty() {
+                        w.scope = v.to_string();
+                    }
+                }
+                "gate" => {
+                    if !v.is_empty() {
+                        w.gate = v.to_string();
+                    }
+                }
+                "filter" => w.filter = parse_filter(v),
+                "limit" => w.limit = parse_limit(v)?,
+                _ => return Err(format!("unknown field: {}", k)),
+            }
+        }
+        return Ok(());
+    }
+
+    let parts = raw.split_whitespace().collect::<Vec<_>>();
+    if let Some(scope) = parts.first() {
+        w.scope = (*scope).to_string();
+    }
+    if let Some(gate) = parts.get(1) {
+        w.gate = (*gate).to_string();
+    }
+    if let Some(filter) = parts.get(2) {
+        w.filter = parse_filter(filter);
+    }
+    if let Some(limit) = parts.get(3) {
+        w.limit = parse_limit(limit)?;
+    }
+    Ok(())
 }
 
 pub(super) fn continue_browse_wizard(app: &mut App, action: TextInputAction, value: String) {
@@ -40,51 +74,12 @@ pub(super) fn continue_browse_wizard(app: &mut App, action: TextInputAction, val
     }
 
     match action {
-        TextInputAction::BrowseScope => {
-            let v = value.trim().to_string();
+        TextInputAction::BrowseQuery => {
             if let Some(w) = app.browse_wizard.as_mut()
-                && !v.is_empty()
+                && let Err(err) = apply_compact_query(w, &value)
             {
-                w.scope = v;
-            }
-            open_gate_prompt(app);
-        }
-        TextInputAction::BrowseGate => {
-            let v = value.trim().to_string();
-            if let Some(w) = app.browse_wizard.as_mut()
-                && !v.is_empty()
-            {
-                w.gate = v;
-            }
-            open_filter_prompt(app);
-        }
-        TextInputAction::BrowseFilter => {
-            let v = value.trim().to_string();
-            if let Some(w) = app.browse_wizard.as_mut() {
-                w.filter = if v.is_empty() { None } else { Some(v) };
-            }
-            let initial = app
-                .browse_wizard
-                .as_ref()
-                .and_then(|w| w.limit)
-                .map(|n| n.to_string());
-            open_limit_prompt(app, initial, vec!["Optional limit".to_string()]);
-        }
-        TextInputAction::BrowseLimit => {
-            let v = value.trim().to_string();
-            let limit = if v.is_empty() {
-                None
-            } else {
-                match v.parse::<usize>() {
-                    Ok(n) => Some(n),
-                    Err(_) => {
-                        open_limit_prompt(app, Some(v), vec!["error: invalid number".to_string()]);
-                        return;
-                    }
-                }
-            };
-            if let Some(w) = app.browse_wizard.as_mut() {
-                w.limit = limit;
+                app.push_error(format!("browse edit: {}", err));
+                return;
             }
             app.finish_browse_wizard();
         }

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::model::{WorkspaceConfig, WorkspaceState};
+use crate::model::{WorkflowProfile, WorkspaceConfig, WorkspaceState};
 
 use super::{LocalStore, STORE_DIR, write_atomic};
 
@@ -45,6 +45,7 @@ impl LocalStore {
             remote: None,
             chunking: None,
             retention: None,
+            workflow_profile: WorkflowProfile::default(),
         };
         let cfg_bytes = serde_json::to_vec_pretty(&cfg).context("serialize workspace config")?;
         write_atomic(&root.join("config.json"), &cfg_bytes).context("write config.json")?;

@@ -29,10 +29,13 @@ impl App {
                     self.quit = true;
                 }
 
-                "bootstrap" | "remote" | "ping" | "fetch" | "lanes" | "members" | "member"
-                | "lane-member" | "inbox" | "bundles" | "bundle" | "pins" | "pin" | "approve"
-                | "promote" | "release" | "superpositions" | "supers" => {
-                    self.push_error("remote command; press Tab to switch to remote".to_string());
+                "bootstrap" | "create-repo" | "gates" | "remote" | "ping" | "fetch" | "lanes"
+                | "releases" | "members" | "member" | "lane-member" | "inbox" | "bundles"
+                | "bundle" | "pins" | "pin" | "approve" | "promote" | "release"
+                | "superpositions" | "supers" => {
+                    self.switch_to_remote_root();
+                    self.push_output(vec![format!("switched to remote context for `{}`", cmd)]);
+                    self.dispatch_root(cmd, args);
                 }
 
                 _ => {
@@ -79,8 +82,11 @@ impl App {
                     self.quit = true;
                 }
 
-                "init" | "snap" | "publish" | "history" | "show" | "restore" | "move" | "mv" => {
-                    self.push_error("local command; press Tab to switch to local".to_string());
+                "init" | "snap" | "publish" | "sync" | "history" | "show" | "restore" | "move"
+                | "mv" | "purge" => {
+                    self.switch_to_local_root();
+                    self.push_output(vec![format!("switched to local context for `{}`", cmd)]);
+                    self.dispatch_root(cmd, args);
                 }
 
                 _ => {

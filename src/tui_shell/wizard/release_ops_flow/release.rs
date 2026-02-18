@@ -1,12 +1,21 @@
 use super::*;
 
 impl App {
+    fn current_workflow_profile(&self) -> crate::model::WorkflowProfile {
+        self.workspace
+            .as_ref()
+            .and_then(|ws| ws.store.read_config().ok())
+            .map(|cfg| cfg.workflow_profile)
+            .unwrap_or_default()
+    }
+
     pub(in crate::tui_shell) fn start_release_wizard(&mut self, bundle_id: String) {
         self.release_wizard = Some(ReleaseWizard {
             bundle_id,
             channel: "main".to_string(),
             notes: None,
         });
+        let profile = self.current_workflow_profile();
 
         self.open_text_input_modal(
             "Release",
@@ -15,6 +24,8 @@ impl App {
             Some("main".to_string()),
             vec![
                 "Release channel name (example: main).".to_string(),
+                format!("profile: {}", profile.as_str()),
+                profile.release_hint().to_string(),
                 "Esc cancels.".to_string(),
             ],
         );

@@ -1,6 +1,17 @@
 use super::*;
 use crate::tui_shell::App;
 
+fn compact_query(scope: &str, gate: &str, filter: &Option<String>, limit: Option<usize>) -> String {
+    let filter = filter.clone().unwrap_or_else(|| "none".to_string());
+    let limit = limit
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    format!(
+        "scope={} gate={} filter={} limit={}",
+        scope, gate, filter, limit
+    )
+}
+
 pub(super) fn start_browse_wizard(app: &mut App, target: BrowseTarget) {
     let cfg = match app.remote_config() {
         Some(c) => c,
@@ -29,12 +40,20 @@ pub(super) fn start_browse_wizard(app: &mut App, target: BrowseTarget) {
         limit,
     });
 
-    let initial = app.browse_wizard.as_ref().map(|w| w.scope.clone());
+    let initial = app
+        .browse_wizard
+        .as_ref()
+        .map(|w| compact_query(&w.scope, &w.gate, &w.filter, w.limit));
     app.open_text_input_modal(
         "Browse",
-        "scope> ",
-        TextInputAction::BrowseScope,
+        "query> ",
+        TextInputAction::BrowseQuery,
         initial,
-        vec!["Scope id (Enter keeps current).".to_string()],
+        vec![
+            "Edit fields in one line.".to_string(),
+            "Format: scope=<id> gate=<id> filter=<q|none> limit=<n|none>".to_string(),
+            "Positional also works: <scope> <gate> [filter] [limit]".to_string(),
+            "Blank keeps current values.".to_string(),
+        ],
     );
 }

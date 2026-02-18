@@ -39,8 +39,10 @@ pub(super) fn root_mode_hints(app: &App) -> Vec<String> {
             vec!["history".to_string()]
         }
         RootContext::Remote => {
-            if !app.remote_configured || app.remote_identity.is_none() {
+            if !app.remote_configured {
                 vec!["login".to_string(), "bootstrap".to_string()]
+            } else if app.remote_identity.is_none() {
+                vec!["login".to_string(), "ping".to_string()]
             } else if app.remote_repo_missing() {
                 vec!["create-repo".to_string()]
             } else {

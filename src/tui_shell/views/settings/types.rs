@@ -1,6 +1,7 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::tui_shell) enum SettingsItemKind {
     ToggleTimestamps,
+    WorkflowProfileSet,
     ChunkingShow,
     ChunkingSet,
     ChunkingReset,
@@ -13,6 +14,7 @@ pub(in crate::tui_shell) enum SettingsItemKind {
 
 #[derive(Clone, Copy, Debug)]
 pub(in crate::tui_shell) struct SettingsSnapshot {
+    pub(in crate::tui_shell) workflow_profile: crate::model::WorkflowProfile,
     pub(in crate::tui_shell) chunk_size_mib: u64,
     pub(in crate::tui_shell) threshold_mib: u64,
 

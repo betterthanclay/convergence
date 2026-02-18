@@ -9,6 +9,16 @@ pub(super) fn list_rows(view: &SettingsView, ctx: &RenderCtx) -> Vec<ListItem<'s
     for kind in &view.items {
         let row = match kind {
             SettingsItemKind::ToggleTimestamps => format!("timestamps: {}", ctx.ts_mode.label()),
+            SettingsItemKind::WorkflowProfileSet => {
+                if let Some(snapshot) = view.snapshot {
+                    format!(
+                        "workflow profile: {} (set...)",
+                        snapshot.workflow_profile.as_str()
+                    )
+                } else {
+                    "workflow profile: set...".to_string()
+                }
+            }
             SettingsItemKind::ChunkingShow => {
                 if let Some(snapshot) = view.snapshot {
                     format!(

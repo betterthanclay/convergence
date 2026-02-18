@@ -23,6 +23,7 @@ pub(in crate::tui_shell) fn dashboard_data(
     };
 
     let mut out = new_dashboard_data();
+    out.workflow_profile = cfg.workflow_profile;
     out.healthz = Some(fetch_healthz(&remote.base_url));
 
     let client = RemoteClient::new(remote.clone(), token)?;

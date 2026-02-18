@@ -4,8 +4,14 @@ use crate::tui_shell::status::DashboardData;
 
 pub(super) fn action_lines(d: &DashboardData) -> Vec<Line<'static>> {
     let mut action_lines: Vec<Line<'static>> = Vec::new();
+    action_lines.push(Line::from(d.workflow_profile.flow_hint()));
+    action_lines.push(Line::from(format!(
+        "profile: {}",
+        d.workflow_profile.as_str()
+    )));
     if d.next_actions.is_empty() {
-        action_lines.push(Line::from("(none)"));
+        action_lines.push(Line::from("next: none"));
+        action_lines.push(Line::from("tip: / shows available commands"));
     } else {
         for a in &d.next_actions {
             action_lines.push(Line::from(format!("- {}", a)));

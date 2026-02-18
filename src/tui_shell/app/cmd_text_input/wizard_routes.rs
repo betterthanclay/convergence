@@ -48,10 +48,7 @@ pub(super) fn submit_wizard_text_input(app: &mut App, action: TextInputAction, v
             app.continue_lane_member_wizard(action, value);
         }
 
-        TextInputAction::BrowseScope
-        | TextInputAction::BrowseGate
-        | TextInputAction::BrowseFilter
-        | TextInputAction::BrowseLimit => {
+        TextInputAction::BrowseQuery => {
             app.continue_browse_wizard(action, value);
         }
 

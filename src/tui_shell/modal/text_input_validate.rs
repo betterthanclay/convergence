@@ -20,8 +20,7 @@ pub(super) fn allow_empty_text_input(action: &super::super::TextInputAction) -> 
             | super::super::TextInputAction::ReleaseNotes
             | super::super::TextInputAction::PinAction
             | super::super::TextInputAction::MemberRole
-            | super::super::TextInputAction::BrowseFilter
-            | super::super::TextInputAction::BrowseLimit
+            | super::super::TextInputAction::BrowseQuery
             | super::super::TextInputAction::GateGraphAddGateUpstream
             | super::super::TextInputAction::GateGraphEditUpstream
     )
@@ -62,6 +61,13 @@ pub(super) fn validate_text_input(
                     Ok(n) if n > 0 => Ok(()),
                     _ => Err("expected a positive number (or 'unset')".to_string()),
                 }
+            }
+        }
+        super::super::TextInputAction::WorkflowProfileSet => {
+            let v = raw.trim().to_lowercase();
+            match v.as_str() {
+                "software" | "daw" | "game-assets" | "game_assets" | "gameassets" => Ok(()),
+                _ => Err("expected: software | daw | game-assets".to_string()),
             }
         }
         _ => Ok(()),

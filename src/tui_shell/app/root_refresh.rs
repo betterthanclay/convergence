@@ -50,10 +50,17 @@ impl App {
                 ));
                 lines.push(note.to_string());
                 lines.push("".to_string());
-                lines.push(
+                let hint = if note == "auth: login" || note == "auth: unauthorized" {
                     "hint: login --url <url> --token <token> --repo <id> [--scope <id>] [--gate <id>]"
-                        .to_string(),
-                );
+                        .to_string()
+                } else if note == "auth: server unreachable" {
+                    "hint: ping (or verify server URL/network), then refresh".to_string()
+                } else if note == "auth: server error" {
+                    "hint: server returned an error; try refresh, then ping".to_string()
+                } else {
+                    "hint: ping, then login --url <url> --token <token> --repo <id>".to_string()
+                };
+                lines.push(hint);
                 Some(lines)
             } else {
                 None

@@ -20,6 +20,7 @@ impl App {
 
         let r = cfg.retention.unwrap_or_default();
         Some(SettingsSnapshot {
+            workflow_profile: cfg.workflow_profile,
             chunk_size_mib: chunk_size / (1024 * 1024),
             threshold_mib: threshold / (1024 * 1024),
 
@@ -52,7 +53,10 @@ impl App {
         }
 
         let snapshot = self.load_settings_snapshot();
-        let mut items = vec![SettingsItemKind::ToggleTimestamps];
+        let mut items = vec![
+            SettingsItemKind::ToggleTimestamps,
+            SettingsItemKind::WorkflowProfileSet,
+        ];
         if snapshot.is_some() {
             items.extend([
                 SettingsItemKind::ChunkingShow,

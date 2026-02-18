@@ -27,7 +27,7 @@ impl App {
             }
         }
 
-        // If remote isn't ready, only offer login + global navigation.
+        // If remote isn't ready, prioritize auth/setup but keep diagnostics available.
         if mode == UiMode::Root
             && root_ctx == RootContext::Remote
             && (!self.remote_configured || self.remote_identity.is_none())
@@ -38,6 +38,8 @@ impl App {
                     || d.name == "help"
                     || d.name == "quit"
                     || d.name == "clear"
+                    || (self.remote_configured
+                        && (d.name == "remote" || d.name == "ping" || d.name == "refresh"))
             });
         }
 

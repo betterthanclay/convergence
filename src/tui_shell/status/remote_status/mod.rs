@@ -1,3 +1,4 @@
+use crate::model::WorkflowProfile;
 use crate::remote::RemoteClient;
 use crate::tui_shell::{RenderCtx, fmt_ts_list, latest_releases_by_channel};
 use crate::workspace::Workspace;
@@ -11,6 +12,7 @@ pub(in crate::tui_shell) use self::lines::remote_status_lines;
 
 #[derive(Debug, Clone)]
 pub(in crate::tui_shell) struct DashboardData {
+    pub(in crate::tui_shell) workflow_profile: WorkflowProfile,
     pub(in crate::tui_shell) healthz: Option<String>,
     pub(in crate::tui_shell) gates_total: usize,
 
@@ -38,6 +40,7 @@ pub(in crate::tui_shell) struct DashboardData {
 
 fn new_dashboard_data() -> DashboardData {
     DashboardData {
+        workflow_profile: WorkflowProfile::default(),
         healthz: None,
         gates_total: 0,
 

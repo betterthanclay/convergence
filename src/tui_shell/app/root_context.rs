@@ -6,6 +6,35 @@ use super::parse_utils::server_label;
 use super::*;
 
 impl App {
+    fn classify_remote_auth_error(err: &str) -> &'static str {
+        let lower = err.to_lowercase();
+        if lower.contains("unauthorized")
+            || lower.contains("401")
+            || lower.contains("forbidden")
+            || lower.contains("403")
+        {
+            return "auth: unauthorized";
+        }
+        if lower.contains("connection refused")
+            || lower.contains("connection reset")
+            || lower.contains("dns")
+            || lower.contains("timed out")
+            || lower.contains("timeout")
+            || lower.contains("unreachable")
+            || lower.contains("refused")
+        {
+            return "auth: server unreachable";
+        }
+        if lower.contains("500")
+            || lower.contains("502")
+            || lower.contains("503")
+            || lower.contains("504")
+        {
+            return "auth: server error";
+        }
+        "auth: error"
+    }
+
     pub(super) fn switch_to_local_root(&mut self) {
         self.root_ctx = RootContext::Local;
         self.frames = vec![ViewFrame {
@@ -88,12 +117,8 @@ impl App {
                 self.remote_identity_note = None;
             }
             Err(err) => {
-                let s = err.to_string();
-                if s.contains("unauthorized") {
-                    self.remote_identity_note = Some("auth: unauthorized".to_string());
-                } else {
-                    self.remote_identity_note = Some("auth: error".to_string());
-                }
+                let note = Self::classify_remote_auth_error(&err.to_string());
+                self.remote_identity_note = Some(note.to_string());
                 self.remote_identity = None;
             }
         }
