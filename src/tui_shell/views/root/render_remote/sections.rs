@@ -9,6 +9,7 @@ pub(super) fn action_lines(d: &DashboardData) -> Vec<Line<'static>> {
         "profile: {}",
         d.workflow_profile.as_str()
     )));
+    action_lines.push(Line::from(onboarding_hint(d)));
     action_lines.push(Line::from(
         "terms: publish=input  bundle=gate output  promote=advance gate",
     ));
@@ -27,6 +28,28 @@ pub(super) fn action_lines(d: &DashboardData) -> Vec<Line<'static>> {
         }
     }
     action_lines
+}
+
+fn onboarding_hint(d: &DashboardData) -> String {
+    if d.inbox_total == 0 && d.bundles_total == 0 && d.releases_total == 0 {
+        return "start: local publish, then remote inbox [publish -> Tab -> inbox]".to_string();
+    }
+    if d.inbox_pending > 0 {
+        return "start: triage inbox and create bundle [inbox -> bundle]".to_string();
+    }
+    if d.blocked_superpositions > 0 {
+        return "start: resolve blocked bundle conflicts [bundles -> superpositions]".to_string();
+    }
+    if d.blocked_approvals > 0 {
+        return "start: collect required approvals [bundles -> approve]".to_string();
+    }
+    if d.bundles_promotable > 0 {
+        return "start: promote ready bundle [bundles -> promote]".to_string();
+    }
+    if d.releases_total == 0 {
+        return "start: create first release channel [bundles -> release]".to_string();
+    }
+    "start: fetch a release into local workspace [releases -> fetch]".to_string()
 }
 
 pub(super) fn inbox_lines(d: &DashboardData) -> Vec<Line<'static>> {
