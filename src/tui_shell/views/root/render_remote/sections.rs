@@ -9,6 +9,15 @@ pub(super) fn action_lines(d: &DashboardData) -> Vec<Line<'static>> {
         "profile: {}",
         d.workflow_profile.as_str()
     )));
+    action_lines.push(Line::from(
+        "terms: publish=input  bundle=gate output  promote=advance gate",
+    ));
+    let release_term = match d.workflow_profile {
+        crate::model::WorkflowProfile::Daw => "release=mastered mixdown",
+        crate::model::WorkflowProfile::GameAssets => "release=build-ready pack",
+        crate::model::WorkflowProfile::Software => "release=channel output",
+    };
+    action_lines.push(Line::from(format!("terms: {}", release_term)));
     if d.next_actions.is_empty() {
         action_lines.push(Line::from("next: none"));
         action_lines.push(Line::from("tip: / shows available commands"));
