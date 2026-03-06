@@ -7,12 +7,11 @@ Batch: `repo-surface normalization`
 
 - Promoted Effigy to the explicit default command surface for Convergence contributor work.
 - Added root `health`, `validate`, and `qa` tasks so the repo has a standard Effigy-first development loop.
-- Updated package shims and agent-facing docs so `effigy test` is the known default for tests, with `cargo nextest` used underneath when available.
+- Updated agent-facing docs so `effigy test` is the known default for tests, with `cargo nextest` used underneath when available.
 
 ## Changes
 
 - Expanded [`effigy.toml`](/Users/betterthanclay/Dev/projects/convergence/effigy.toml) to include `check`, `fmt:check`, `clippy`, `health`, `validate`, `qa`, and clearer runtime aliases alongside the existing run and trace tasks.
-- Updated [`package.json`](/Users/betterthanclay/Dev/projects/convergence/package.json) so common scripts route back through Effigy.
 - Updated [`README.md`](/Users/betterthanclay/Dev/projects/convergence/README.md), [`AGENTS.md`](/Users/betterthanclay/Dev/projects/convergence/AGENTS.md), [`docs/README.md`](/Users/betterthanclay/Dev/projects/convergence/docs/README.md), and [`docs/processes/260-agents-operating-guardrails.md`](/Users/betterthanclay/Dev/projects/convergence/docs/processes/260-agents-operating-guardrails.md) to teach the Effigy-first loop.
 
 ## Validation Performed
@@ -20,7 +19,6 @@ Batch: `repo-surface normalization`
 - `effigy tasks --repo /Users/betterthanclay/Dev/projects/convergence`
 - `effigy health --repo /Users/betterthanclay/Dev/projects/convergence`
 - `effigy validate --repo /Users/betterthanclay/Dev/projects/convergence`
-- `bun run tasks`
 - `git diff --check`
 
 ## Evidence

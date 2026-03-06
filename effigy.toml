@@ -1,9 +1,6 @@
 [catalog]
 alias = "convergence"
 
-[package_manager]
-js = "bun"
-
 [tasks]
 converge = "node scripts/run-converge.js {args}"
 cli = "node scripts/run-converge.js {args}"
