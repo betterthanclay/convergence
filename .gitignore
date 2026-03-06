@@ -37,3 +37,4 @@ target
 .cache/
 .cargo/*
 !.cargo/config.toml
+.effigy/
