@@ -1,4 +1,4 @@
-# Phase 001: Local Snap Store (MVP Foundation)
+# 001 - Local Snap Store (MVP Foundation)
 
 Current status:
 - Implemented: local `.converge/` store, `converge init|snap|snaps|show|restore`
@@ -111,9 +111,9 @@ Current on-disk layout (v1):
 - `converge restore <snap-id>` recreates the snap’s tree deterministically.
 - At least minimal `--json` support exists for listing/inspection.
 
-## Follow-on Phases
+## Follow-on Roadmaps
 
-- Phase 002: Central Authority MVP (auth, publish intake, fetch) + object distribution.
-- Phase 003: Gates + Bundles + Promotion semantics wired to the server.
-- Phase 004: TUI for inbox/superpositions/bundle promotion.
-- Phase 005: Background capture (daemon/IDE).
+- Roadmap 002: Central Authority MVP (auth, publish intake, fetch) + object distribution.
+- Roadmap 003: Gates + Bundles + Promotion semantics wired to the server.
+- Roadmap 004: TUI for inbox/superpositions/bundle promotion.
+- Roadmap 005: Background capture (daemon/IDE).

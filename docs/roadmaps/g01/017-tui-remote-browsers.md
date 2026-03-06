@@ -1,4 +1,4 @@
-# Phase 017: TUI Remote Browsers (Inbox/Bundles/Superpositions)
+# 017 - TUI Remote Browsers (Inbox/Bundles/Superpositions)
 
 ## Goal
 

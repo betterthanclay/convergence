@@ -1,4 +1,4 @@
-# Phase 010: TUI Resolution Ergonomics
+# 010 - TUI Resolution Ergonomics
 
 ## Goal
 

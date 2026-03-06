@@ -1,4 +1,4 @@
-# Phase 002: Central Authority MVP (Publish + Fetch)
+# 002 - Central Authority MVP (Publish + Fetch)
 
 ## Goal
 
@@ -158,8 +158,8 @@ Minimum provenance:
 - Server enforces at least basic permissions.
 - Provenance exists for publish events.
 
-## Follow-on Phases
+## Follow-on Roadmaps
 
-- Phase 003: Gates + `converge bundle` + promotability + `promote`.
-- Phase 004: TUI (inbox + superpositions + promotion workflow).
-- Phase 005: Rich policy execution (CI integration) + release channels and artifacts.
+- Roadmap 003: Gates + `converge bundle` + promotability + `promote`.
+- Roadmap 004: TUI (inbox + superpositions + promotion workflow).
+- Roadmap 005: Rich policy execution (CI integration) + release channels and artifacts.

@@ -1,4 +1,4 @@
-# Phase 027: Retention Tooling Hardening
+# 027 - Retention Tooling Hardening
 
 ## Goal
 

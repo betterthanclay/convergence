@@ -1,4 +1,4 @@
-# Phase 026: Remote Purge CLI
+# 026 - Remote Purge CLI
 
 ## Goal
 

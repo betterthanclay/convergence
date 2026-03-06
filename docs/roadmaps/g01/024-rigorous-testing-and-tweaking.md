@@ -1,4 +1,4 @@
-# Phase 024: Rigorous Testing And Tweaking
+# 024 - Rigorous Testing And Tweaking
 
 ## Goal
 

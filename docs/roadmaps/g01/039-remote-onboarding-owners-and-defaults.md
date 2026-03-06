@@ -1,4 +1,4 @@
-# Phase 039: Remote Onboarding (Owners And Defaults)
+# 039 - Remote Onboarding (Owners And Defaults)
 
 ## Goal
 

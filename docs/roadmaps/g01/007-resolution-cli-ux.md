@@ -1,4 +1,4 @@
-# Phase 007: Resolution CLI UX
+# 007 - Resolution CLI UX
 
 ## Goal
 

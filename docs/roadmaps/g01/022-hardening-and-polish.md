@@ -1,4 +1,4 @@
-# Phase 022: Hardening And Polish
+# 022 - Hardening And Polish
 
 ## Goal
 

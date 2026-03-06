@@ -1,4 +1,4 @@
-# Phase 032: Gate Graph Administration
+# 032 - Gate Graph Administration
 
 Goal: make gate graph setup and evolution a first-class admin UX (not a hardcoded "dev-intake" pipeline).
 

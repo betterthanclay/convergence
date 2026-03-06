@@ -1,4 +1,4 @@
-# Phase 009: Resolution Validation
+# 009 - Resolution Validation
 
 ## Goal
 

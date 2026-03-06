@@ -1,4 +1,4 @@
-# Phase 014: TUI Hybrid Views (Optional Panels)
+# 014 - TUI Hybrid Views (Optional Panels)
 
 Status: implemented as an intermediate step. Later phases will replace the split-panel approach with modal, view-driven screens while keeping the command input.
 

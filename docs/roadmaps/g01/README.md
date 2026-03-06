@@ -9,7 +9,7 @@
 
 ## Naming boundary
 
-- `001` to `041` retain their earlier phase-era slugs and titles.
+- `001` to `041` retain their earlier slugs, but titles are normalized to roadmap ID-first form.
 - New roadmap files opened after the migration should use the Northstar `NNN-topic.md` style.
 
 ## Next roadmap

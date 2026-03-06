@@ -1,8 +1,8 @@
-# Phase 035: Post-Decomposition Hardening
+# 035 - Post-Decomposition Hardening
 
 ## Goal
 
-Stabilize and harden the decomposed module layout from Phase 034 so boundaries are explicit, behavior is easy to verify, and future changes can be made with lower risk.
+Stabilize and harden the decomposed module layout from roadmap 034 so boundaries are explicit, behavior is easy to verify, and future changes can be made with lower risk.
 
 ## Scope
 

@@ -1,4 +1,4 @@
-# Phase 034: God-File Decomposition Program (Consolidated)
+# 034 - God-File Decomposition Program (Consolidated)
 
 ## Goal
 
@@ -7,9 +7,9 @@ Track the full god-file reduction program in one place while preserving a clear,
 ## Scope
 
 This consolidated phase replaces the former per-wave roadmap files and captures the same initiative end-to-end:
-- Legacy Phase 034 (`034-god-file-decomposition.md`)
-- Legacy Phase 036 (`036-tui-and-core-god-file-wave-2.md`)
-- Legacy Phases 037-109 (`037-god-file-decomposition-wave-3.md` through `109-god-file-decomposition-wave-75.md`)
+- Legacy roadmap 034 (`034-god-file-decomposition.md`)
+- Legacy roadmap 036 (`036-tui-and-core-god-file-wave-2.md`)
+- Legacy roadmaps 037-109 (`037-god-file-decomposition-wave-3.md` through `109-god-file-decomposition-wave-75.md`)
 
 ## Program Outcomes
 

@@ -1,4 +1,4 @@
-# Phase 031: TUI Server Bootstrap
+# 031 - TUI Server Bootstrap
 
 Goal: make it easy to bootstrap a brand-new `converge-server` (first admin + token) from the TUI.
 

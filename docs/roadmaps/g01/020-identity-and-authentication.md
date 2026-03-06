@@ -1,4 +1,4 @@
-# Phase 020: Identity And Authentication
+# 020 - Identity And Authentication
 
 Current status:
 - Started: persisted users/tokens, bearer middleware resolves Subject, token endpoints.

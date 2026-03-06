@@ -1,4 +1,4 @@
-# Phase 008: Stable Resolution Variant Keys
+# 008 - Stable Resolution Variant Keys
 
 ## Goal
 

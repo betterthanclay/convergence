@@ -1,4 +1,4 @@
-# Phase 040: Remote Onboarding (Quick Paths)
+# 040 - Remote Onboarding (Quick Paths)
 
 ## Goal
 

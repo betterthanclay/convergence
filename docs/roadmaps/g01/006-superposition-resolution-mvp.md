@@ -1,4 +1,4 @@
-# Phase 006: Superposition Resolution MVP
+# 006 - Superposition Resolution MVP
 
 ## Goal
 

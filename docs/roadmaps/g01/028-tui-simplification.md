@@ -1,4 +1,4 @@
-# Phase 028: TUI Simplification (Kid-Friendly UX)
+# 028 - TUI Simplification (Kid-Friendly UX)
 
 ## Goal
 

@@ -1,4 +1,4 @@
-# Phase 012: TUI Command Shell (Local-First)
+# 012 - TUI Command Shell (Local-First)
 
 Status: implemented as an intermediate step. The global command input remains, but later phases will shift away from an open-ended scrollback UI toward modal, view-driven screens.
 

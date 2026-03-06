@@ -1,4 +1,4 @@
-# Phase 021: Release Channels And Diff
+# 021 - Release Channels And Diff
 
 ## Goal
 

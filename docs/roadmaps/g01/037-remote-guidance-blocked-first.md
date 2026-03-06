@@ -1,4 +1,4 @@
-# Phase 037: Remote Guidance (Blocked-First)
+# 037 - Remote Guidance (Blocked-First)
 
 ## Goal
 

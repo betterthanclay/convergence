@@ -1,4 +1,4 @@
-# Phase 004: TUI (Inbox, Inspection, Resolution)
+# 004 - TUI (Inbox, Inspection, Resolution)
 
 ## Goal
 

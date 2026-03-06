@@ -1,4 +1,4 @@
-# Phase 018: Large Object Storage, Retention, And Gate Policies
+# 018 - Large Object Storage, Retention, And Gate Policies
 
 Current status:
 - Implemented (fixed-size chunking MVP): chunked file entry type, local store ingest/restore, publish/fetch over recipes+chunks.

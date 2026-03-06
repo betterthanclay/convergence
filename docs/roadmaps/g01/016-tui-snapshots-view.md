@@ -1,4 +1,4 @@
-# Phase 016: TUI Snapshot Browser View
+# 016 - TUI Snapshot Browser View
 
 ## Goal
 
@@ -12,7 +12,7 @@ In scope:
 - Mode-local commands for common actions.
 
 Out of scope:
-- Remote browsing (Phase 017).
+- Remote browsing (Roadmap 017).
 
 ## Tasks
 

@@ -1,4 +1,4 @@
-# Phase 033: Release Policy Per Gate (Remove “Terminal Gate”)
+# 033 - Release Policy Per Gate (Remove “Terminal Gate”)
 
 Goal: simplify releases by allowing any gate to create a release by default.
 

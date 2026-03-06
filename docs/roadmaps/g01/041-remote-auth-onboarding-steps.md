@@ -1,4 +1,4 @@
-# Phase 041: Remote Auth Onboarding Steps
+# 041 - Remote Auth Onboarding Steps
 
 ## Goal
 

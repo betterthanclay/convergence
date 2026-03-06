@@ -1,4 +1,4 @@
-# Phase 025: Operator Docs For Releases And Retention
+# 025 - Operator Docs For Releases And Retention
 
 ## Goal
 

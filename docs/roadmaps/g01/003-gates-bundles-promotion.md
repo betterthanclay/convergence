@@ -1,4 +1,4 @@
-# Phase 003: Gates, Bundles, and Promotion (Server-Side Convergence)
+# 003 - Gates, Bundles, and Promotion (Server-Side Convergence)
 
 ## Goal
 
@@ -89,7 +89,7 @@ Next step:
 - Bundles report promotability (true/false + reasons).
 - Promotion advances a bundle to a downstream gate only when policy allows.
 
-## Follow-on Phases
+## Follow-on Roadmaps
 
-- Phase 004: TUI for inbox/superpositions/bundle promotion.
-- Phase 005: Rich policy execution (CI integration) + release channels and artifacts.
+- Roadmap 004: TUI for inbox/superpositions/bundle promotion.
+- Roadmap 005: Rich policy execution (CI integration) + release channels and artifacts.

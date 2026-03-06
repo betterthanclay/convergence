@@ -1,4 +1,4 @@
-# Phase 013: TUI Remote Mode (Shell Commands)
+# 013 - TUI Remote Mode (Shell Commands)
 
 ## Goal
 
@@ -14,7 +14,7 @@ In scope:
 - Minimal text output to scrollback (tables / summaries).
 
 Out of scope:
-- Rich list/detail remote views (Phase 014).
+- Rich list/detail remote views (Roadmap 014).
 - Server-side resolution objects.
 
 ## Tasks

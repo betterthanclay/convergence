@@ -1,4 +1,4 @@
-# Phase 019: Lanes, Sync, And Unpublished Collaboration
+# 019 - Lanes, Sync, And Unpublished Collaboration
 
 Current status:
 - In progress: server lane heads + endpoints; client/CLI/TUI sync and lanes fetch.

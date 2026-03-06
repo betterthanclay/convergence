@@ -1,4 +1,4 @@
-# Phase 036: TUI Second-Nature UX Hardening
+# 036 - TUI Second-Nature UX Hardening
 
 ## Goal
 

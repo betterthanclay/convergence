@@ -1,4 +1,4 @@
-# Phase 038: Remote Onboarding ("Start Here")
+# 038 - Remote Onboarding ("Start Here")
 
 ## Goal
 

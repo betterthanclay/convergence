@@ -1,4 +1,4 @@
-# Phase 011: Resolution Provenance
+# 011 - Resolution Provenance
 
 ## Goal
 
