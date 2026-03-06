@@ -19,3 +19,15 @@ Northstar-aligned documentation authority for Convergence.
 - Historical decision records now live under `logs/YYYY-MM/`.
 - New roadmap work should use roadmap IDs such as `g01.043`.
 - New rationale records and implementation batch notes should go in `logs/YYYY-MM/`.
+
+## Effigy-First Loop
+
+From the repo root:
+
+```bash
+effigy tasks --repo .
+effigy health --repo .
+effigy validate --repo .
+```
+
+Use `effigy test --repo .` for the repository test default, which prefers `cargo nextest` when it is available on the machine.

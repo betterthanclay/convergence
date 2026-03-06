@@ -10,12 +10,20 @@ Scope: whole `convergence/` repository.
 - Keep terminology consistent (`snap`, `publish`, `bundle`, `promote`, `release`, `superposition`).
 - Do not recreate retired `docs/roadmap/` or `docs/decisions/` folders.
 
+## Effigy-First Execution
+
+- Start with `effigy tasks --repo .`.
+- Run `effigy doctor --repo .` when environment or task resolution is uncertain.
+- Prefer `effigy health --repo .` for the narrow baseline.
+- Prefer `effigy validate --repo .` before broader merge-ready checks.
+- Prefer `effigy test --repo .` over raw `cargo test`; the repo task intentionally defaults to `cargo nextest` when available.
+- Use direct Cargo or Node commands only when the needed operation is not represented in `effigy.toml`.
+
 ## Validate
 
-- `cargo check`
-- `cargo fmt`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo nextest run -P ci` (when broader verification is needed)
+- `effigy health --repo .`
+- `effigy validate --repo .`
+- `effigy test --repo .` (for test-focused work)
 
 ## References
 

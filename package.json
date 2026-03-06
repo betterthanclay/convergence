@@ -1,5 +1,21 @@
 {
-    "name": "convergence",
-    "version": "0.0.0",
-    "private": true
+  "name": "convergence",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "tasks": "effigy tasks --repo .",
+    "health": "effigy health --repo .",
+    "doctor": "effigy doctor --repo .",
+    "validate": "effigy validate --repo .",
+    "qa": "effigy qa --repo .",
+    "check": "effigy check --repo .",
+    "fmt:check": "effigy fmt:check --repo .",
+    "clippy": "effigy clippy --repo .",
+    "test": "effigy test --repo .",
+    "test:nextest": "effigy test:nextest --repo .",
+    "tui": "effigy tui --repo .",
+    "api": "effigy api --repo .",
+    "trace:report": "effigy trace:report --repo .",
+    "effigy:dev": "effigy-dev --repo ."
+  }
 }

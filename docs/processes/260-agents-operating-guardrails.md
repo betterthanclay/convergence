@@ -19,7 +19,8 @@ Purpose: keep AGENTS guidance concise and operational while moving detail into d
 
 ## Tooling Rules
 
-- Use `cargo` for Rust checks and tests.
+- Use Effigy as the default repo command surface whenever the needed task exists.
+- Treat Cargo and Node scripts as implementation detail behind Effigy tasks unless Effigy lacks coverage.
 - Keep commands deterministic and repository-local.
 - Do not introduce additional package managers/toolchains unless requested.
 
@@ -27,10 +28,9 @@ Purpose: keep AGENTS guidance concise and operational while moving detail into d
 
 Run what matches scope:
 
-- `cargo check`
-- `cargo fmt`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo nextest run -P ci` (for broader verification)
+- `effigy health --repo .`
+- `effigy validate --repo .`
+- `effigy test --repo .` (for test-focused work; defaults to `cargo nextest` when available)
 
 ## Contract and Naming Rules
 

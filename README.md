@@ -21,7 +21,37 @@ Documentation is the source of truth:
 - Roadmaps: [docs/roadmaps/README.md](/Users/betterthanclay/Dev/projects/convergence/docs/roadmaps/README.md)
 - Logs: [docs/logs/README.md](/Users/betterthanclay/Dev/projects/convergence/docs/logs/README.md)
 
-## Build
+## Effigy-First Loop
+
+Use Effigy as the default repo command surface:
+
+```bash
+effigy tasks --repo .
+effigy doctor --repo .
+effigy health --repo .
+effigy validate --repo .
+```
+
+Primary repo-owned checks:
+
+```bash
+effigy check --repo .
+effigy fmt:check --repo .
+effigy clippy --repo .
+effigy test --repo .
+```
+
+Runtime entrypoints:
+
+```bash
+effigy tui --repo .
+effigy api --repo . -- --addr 127.0.0.1:8080 --data-dir ./converge-data
+effigy trace:report --repo . -- /tmp/converge-agent-trace.jsonl --out /tmp/converge-friction-report.md
+```
+
+## Underlying Tooling
+
+Effigy wraps the existing Cargo and Node helpers. The direct commands remain available when needed, but they are no longer the recommended first surface.
 
 Rust 2024 edition.
 
@@ -84,3 +114,7 @@ For shared dev servers / first-admin bootstrap, see:
 
 TUI server setup:
 - In the TUI, press `Tab` to switch to remote and use `/bootstrap` (first admin) and `/create-repo` (repo setup).
+
+## Next task
+
+Promote the next Convergence contributor loop into Effigy by deciding whether the repo should expose a first-class smoke or scenario task for local server bootstrap and login flows rather than leaving those as raw command sequences.
