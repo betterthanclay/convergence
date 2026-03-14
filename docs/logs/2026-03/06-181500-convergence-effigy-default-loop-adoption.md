@@ -16,15 +16,15 @@ Batch: `repo-surface normalization`
 
 ## Validation Performed
 
-- `effigy tasks --repo /Users/betterthanclay/Dev/projects/convergence`
-- `effigy health --repo /Users/betterthanclay/Dev/projects/convergence`
-- `effigy validate --repo /Users/betterthanclay/Dev/projects/convergence`
+- `effigy tasks`
+- `effigy health`
+- `effigy validate`
 - `git diff --check`
 
 ## Evidence
 
 - The repo now exposes a standard Effigy-first contract instead of relying on README-only Cargo commands.
-- Test guidance now points at `effigy test --repo .`, making the nextest-preferred behavior discoverable to agents and contributors.
+- Test guidance now points at `effigy test`, making the nextest-preferred behavior discoverable to agents and contributors.
 
 ## Risks
 

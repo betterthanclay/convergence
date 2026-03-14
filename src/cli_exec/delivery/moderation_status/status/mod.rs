@@ -15,7 +15,7 @@ pub(in crate::cli_exec) fn handle_status_command(
     };
 
     let token = ws.store.get_remote_token(&remote)?.context(
-        "no remote token configured (run `converge login --url ... --token ... --repo ...`)",
+        "no remote token configured (run `converge login --url ... --token .....`)",
     )?;
     let client = RemoteClient::new(remote.clone(), token)?;
     let mut pubs = client.list_publications()?;

@@ -4,7 +4,7 @@ This is a manual checklist for quickly validating the Convergence TUI after chan
 
 Prereqs:
 - A workspace with `.converge/` initialized.
-- Remote configured via `login --url ... --token ... --repo ...`.
+- Remote configured via `login --url ... --token .....`.
 
 ## Root
 

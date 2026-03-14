@@ -118,7 +118,7 @@ Later:
 - [x] Stop storing remote token plaintext in `.converge/config.json`.
 - [x] Introduce `.converge/state.json` (or OS keychain) to store secrets.
 - [x] Add CLI commands:
-  - `converge login --url ... --token ... --repo ... [--scope ... --gate ...]`
+  - `converge login --url ... --token ..... [--scope ... --gate ...]`
   - `converge logout`
   - `converge whoami`
 

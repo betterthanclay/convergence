@@ -42,13 +42,13 @@ pub(crate) fn run() -> Result<()> {
 pub(crate) fn require_remote(store: &LocalStore) -> Result<RemoteConfig> {
     let cfg = store.read_config()?;
     cfg.remote
-        .context("no remote configured (run `converge login --url ... --token ... --repo ...`)")
+        .context("no remote configured (run `converge login --url ... --token .....`)")
 }
 
 pub(crate) fn require_remote_and_token(store: &LocalStore) -> Result<(RemoteConfig, String)> {
     let remote = require_remote(store)?;
     let token = store.get_remote_token(&remote)?.context(
-        "no remote token configured (run `converge login --url ... --token ... --repo ...`)",
+        "no remote token configured (run `converge login --url ... --token .....`)",
     )?;
     Ok((remote, token))
 }

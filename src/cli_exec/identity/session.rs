@@ -29,7 +29,7 @@ pub(crate) fn handle_logout_command(ws: &Workspace) -> Result<()> {
     let cfg = ws.store.read_config()?;
     let remote = cfg
         .remote
-        .context("no remote configured (run `converge login --url ... --token ... --repo ...`)")?;
+        .context("no remote configured (run `converge login --url ... --token .....`)")?;
     ws.store
         .clear_remote_token(&remote)
         .context("clear remote token")?;

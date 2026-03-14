@@ -28,9 +28,9 @@ Purpose: keep AGENTS guidance concise and operational while moving detail into d
 
 Run what matches scope:
 
-- `effigy health --repo .`
-- `effigy validate --repo .`
-- `effigy test --repo .` (for test-focused work; defaults to `cargo nextest` when available)
+- `effigy health`
+- `effigy validate`
+- `effigy test` (for test-focused work; defaults to `cargo nextest` when available)
 
 ## Contract and Naming Rules
 

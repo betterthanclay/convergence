@@ -22,7 +22,7 @@ pub(in crate::tui_shell) fn remote_status_lines(
     if token.is_some() {
         lines.push("token: (configured)".to_string());
     } else {
-        lines.push("token: (missing; run `login --url ... --token ... --repo ...`)".to_string());
+        lines.push("token: (missing; run `login --url ... --token .....`)".to_string());
         return Ok(lines);
     }
 

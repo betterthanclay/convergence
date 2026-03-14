@@ -32,7 +32,7 @@ impl App {
             Ok(Some(t)) => t,
             Ok(None) => {
                 self.push_error(
-                    "no remote token configured (run `login --url ... --token ... --repo ...`)"
+                    "no remote token configured (run `login --url ... --token .....`)"
                         .to_string(),
                 );
                 return None;
