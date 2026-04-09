@@ -35,3 +35,14 @@ Scope: whole `convergence/` repository.
 - `docs/roadmaps/`
 - `docs/logs/`
 - `docs/processes/260-agents-operating-guardrails.md`
+- `docs/specs/README.md`
+- `docs/contracts/001-working-rules.md`
+
+## Strict Continuation Rule
+
+- In the active strict lane, `continue` should resolve through the previous
+  `Next Task`.
+- If there is an active ready batch card, execution should anchor on that card.
+- If there is no ready card, stop in planning instead of improvising execution.
+- When the next move is materially ambiguous, ask for intent instead of
+  guessing.

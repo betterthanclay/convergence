@@ -1,6 +1,6 @@
 # g01 Roadmaps
 
-`g01` is the active roadmap generation for Convergence.
+`g01` is complete.
 
 ## Sequence
 
@@ -18,4 +18,5 @@
 
 ## Next roadmap
 
-- Open the next real milestone as `g01.046` (or continue research with additional tracks).
+- Use `g02.001` for active planning. Do not reopen `g01` unless a real
+  currentness error is found.

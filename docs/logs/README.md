@@ -9,8 +9,12 @@ Convergence logs capture timestamped execution history, rationale records, and m
 - Use logs for meaningful work batches, decisions, and rationale updates.
 - Do not create a parallel `decisions/` tree.
 
+## Current evidence window
+
+- `2026-03/06-181500-convergence-effigy-default-loop-adoption.md`
+- `2026-04/09-230000-convergence-full-strict-pause-install.md`
+
 ## Next Task
 
-Keep logging meaningful Convergence batches here while the repo finishes the
-Northstar docs contract and the next roadmap tranche moves from research into
-execution.
+Keep the active evidence window aligned to `g02.001` so the paused strict
+posture is visible without reconstructing it from older research-era logs.

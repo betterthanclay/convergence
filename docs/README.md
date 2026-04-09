@@ -6,6 +6,8 @@ Northstar-aligned documentation authority for Convergence.
 
 - `vision/`: long-horizon product direction and operating intent
 - `architecture/`: system model, invariants, and technical boundaries
+- `contracts/`: explicit working and behavior contracts
+- `specs/`: active strict planning and ready-card execution control
 - `research/`: comparative systems research, translation memos, and implementation bridge artifacts
 - `roadmaps/`: segmented executable milestones and backlog
 - `logs/`: month-sharded execution history and decision/rationale records
@@ -16,9 +18,9 @@ Northstar-aligned documentation authority for Convergence.
 
 ## Current state
 
-- Canonical roadmap execution lives under `roadmaps/g01/`.
+- Canonical roadmap execution now lives under `roadmaps/g02/`.
 - Historical decision records now live under `logs/YYYY-MM/`.
-- New roadmap work should use roadmap IDs such as `g01.043`.
+- New roadmap work should use roadmap IDs such as `g02.001`.
 - New rationale records and implementation batch notes should go in `logs/YYYY-MM/`.
 
 ## Effigy-First Loop
@@ -43,6 +45,5 @@ prefers `cargo nextest` when it is available on the machine.
 
 ## Next Task
 
-Turn the remaining Convergence docs indexes into fully self-validating Northstar
-surfaces so the repo can rely on native Effigy docs checks instead of drift
-being caught only during manual review.
+Keep Convergence paused under the active strict `g02.001` planning gate until a
+real post-research execution boundary justifies the next sequence.

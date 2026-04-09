@@ -118,4 +118,6 @@ TUI server setup:
 
 ## Next task
 
-Promote the next Convergence contributor loop into Effigy by deciding whether the repo should expose a first-class smoke or scenario task for local server bootstrap and login flows rather than leaving those as raw command sequences.
+Keep Convergence paused under `g02.001` until the next real post-research
+execution boundary is explicit, then open that owner through the strict lane
+instead of continuing `g01` by drift.
