@@ -72,7 +72,7 @@ Treat roadmap generations as substantial sequencing eras, not tiny buckets. In a
 
 Treat rollover as full closeout:
 
-- every task in the old generation must be explicitly closed, paused, superseded, or moved to backlog
+- every task in the old generation must be explicitly closed, paused, superseded, or carried as a triage candidate
 - the roadmap front doors must reflect that closed state before the next generation opens
 - stale specs and superseded task records from the closing generation must be archived or removed from `docs/specs/`
 

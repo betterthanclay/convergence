@@ -11,7 +11,7 @@ Convergence roadmaps hold executable Northstar task work, one task per
 - Generation rollover is manual only.
 - Treat generations as substantial sequencing eras, not one-or-two-file buckets. As a healthy default, expect roughly 20 to 40 task files in one generation before rollover is even worth discussing.
 - Treat rollover as full generation closeout, not a convenience reset: close, supersede, or rehome every task in the current generation first, then purge stale generation-specific specs from `docs/specs/` before opening the next generation.
-- Backlog items belong in `backlog/`.
+- Unresolved or deferred candidates belong in `triage/`, never in a roadmap: roadmaps contain only promoted executable tasks.
 - Metadata files stay at the `roadmaps/` root if later needed.
 
 ## Current generation
@@ -23,7 +23,6 @@ Convergence roadmaps hold executable Northstar task work, one task per
 
 - [generation-index.md](./generation-index.md)
 - [g02/README.md](./g02/README.md)
-- [backlog/README.md](./backlog/README.md)
 
 `g01` roadmap files are archived on branch `archive/g01`; the generation index
 records the closed state.
@@ -54,7 +53,7 @@ Do not open `gNN+1` while the current generation still has live task files or st
 
 Before rollover:
 
-- every task in the closing generation must be explicitly closed, paused, superseded, or moved to backlog
+- every task in the closing generation must be explicitly closed, paused, superseded, or carried as a triage candidate
 - the roadmap front doors must agree that the old generation is no longer the live queue
 - `docs/specs/` must be purged so only live or near-live planning artifacts remain in the active tree
 

@@ -59,8 +59,8 @@ encoding; JSON remains the HTTP/API representation.
 - blobs remain raw bytes
 
 Manifest paging for very large directories (>4096 entries) is **deferred
-to backlog**: it touches every manifest walker for a case the beachhead
-rarely hits; revisit against real trees.
+to triage** (see `docs/triage/20260909-roadmap-backlog-retirement.md`): it
+touches every manifest walker for a case the beachhead rarely hits; revisit against real trees.
 
 ## 1c. Batched transport (g02.010)
 

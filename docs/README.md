@@ -10,7 +10,7 @@ Northstar-aligned documentation authority for Convergence.
 - `specs/`: active strict planning and ready-task execution control
 - `research/`: comparative systems research findings (dossiers, memos, tracks)
 - `rebuild/`: g01-era capture artifacts (lessons, TUI UX spec, salvage)
-- `roadmaps/`: executable Northstar tasks (`gNN.NNN`) and backlog
+- `roadmaps/`: executable Northstar tasks (`gNN.NNN`); deferred candidates wait in `triage/`
 - `logs/`: month-sharded execution history and decision/rationale records
 - `guides/`: task-shaped walkthroughs proven by tests
 - `git-podcast/`: origin rationale summary

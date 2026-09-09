@@ -231,7 +231,7 @@ property, the answer is an OS keychain (§9), not a prompt.
   child with named secrets in its environment and gets out of the way.
   Restart policy, health checks, and dependency ordering belong to
   whatever already does that job. Trigger: none expected — this is a
-  boundary, not a backlog item.
+  boundary, not a triage candidate.
 - **Non-environment injection** (file descriptors, named pipes,
   `systemd` credentials). Trigger: a consuming program that supports one
   of them. Almost nothing does today, which is why §10 leads with

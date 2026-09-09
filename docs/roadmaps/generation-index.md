@@ -77,8 +77,8 @@ beachhead proof.
 Outcome: ceilings proven before architecture expands.
 
 - Edge/horizontal scale (`g02.025`) only on measured write or locality pain
-- Manifest paging efficiency (backlog) on measured cost
-- Encrypted secret names, hardware-backed keys (backlog) on deployment demand
+- Manifest paging efficiency (triage) on measured cost
+- Encrypted secret names, hardware-backed keys (triage) on deployment demand
 - Async candidate builds only if publish latency is measured as painful
 
 Rollover trigger for strategy review: a real workload hits the single-process

@@ -23,7 +23,7 @@ properties the code did not have. This doc therefore separates the
 
 Reading rule for everything below: **present tense describes shipped
 behavior.** Anything not yet built is marked `**Deferred**` inline and
-collected in §7, each with the roadmap or backlog that owns it. If you
+collected in §7, each with the roadmap, task, or triage note that owns it. If you
 find a claim here that the code does not honor, that is a bug in this
 doc — fix the doc in the same change that discovers it.
 
@@ -345,10 +345,10 @@ trigger building it, so the list stays a plan rather than a wish.
 
 | Property | State | Owner / trigger |
 | --- | --- | --- |
-| Async candidate builds, partition workers | not built; publish merges inline | backlog; trigger = measured publish-latency pain (see note below) |
-| Horizontal scaling across partitions | not built; one process, one metadata connection | backlog; trigger = measured write ceiling from the scale-walls roadmap |
-| Edge nodes (read-through cache, upload buffering) | not built | backlog; trigger = a real multi-site customer with locality pain |
-| Mapping IdP groups to capabilities | not built; SSO establishes identity only (§4b) | backlog; trigger = an organisation that manages Convergence access in its directory |
+| Async candidate builds, partition workers | not built; publish merges inline | triage; trigger = measured publish-latency pain (see note below) |
+| Horizontal scaling across partitions | not built; one process, one metadata connection | triage; trigger = measured write ceiling from the scale-walls roadmap |
+| Edge nodes (read-through cache, upload buffering) | not built | triage; trigger = a real multi-site customer with locality pain |
+| Mapping IdP groups to capabilities | not built; SSO establishes identity only (§4b) | triage; trigger = an organisation that manages Convergence access in its directory |
 
 The pluggable-backend seam, the partition key, the scope registry,
 event retention, guarded transactional writes, and enforced authz are
