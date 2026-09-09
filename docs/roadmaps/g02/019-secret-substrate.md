@@ -30,7 +30,7 @@ secrets follow in `g02.020`, which depends on this.
 - identity carries grants and tokens (batch 16.3) but no key material,
   so there is nothing to encrypt *to*
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **19.1 Key identity** (complete, card 069): `converge key
   init|list|rotate`; X25519 keypair via `age`; private key sealed under

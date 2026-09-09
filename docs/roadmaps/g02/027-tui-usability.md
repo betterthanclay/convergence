@@ -81,7 +81,7 @@ was the operator's, and the verdict was immediate.
 - rewriting the reducer. `g02.023`'s state machine is sound and its
   tests are worth keeping — this is the layer above it
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **27.1 Frame and navigation** (card 096): the headline. The `Alt` jump
   layer is the *entire* shortcut set and does nothing on stock macOS

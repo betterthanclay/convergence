@@ -29,7 +29,7 @@ is caught by CI, not by audit.
 - No watch-loop timing/ignore test
 - External backends never run against live Postgres/MinIO in CI
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **18.1 Concurrency harness** (complete, card 065): `Cluster` rig with
   N real clients over HTTP; publishes racing promotions, simultaneous

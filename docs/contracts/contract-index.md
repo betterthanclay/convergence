@@ -7,7 +7,7 @@ Governing contracts for Convergence under the strict Northstar posture.
 
 | Contract | Scope |
 | --- | --- |
-| [001-working-rules.md](./001-working-rules.md) | Execution posture: ready cards, continue/closeout, generation rollover, intent checkpoints |
+| [001-working-rules.md](./001-working-rules.md) | Execution posture: ready tasks, continue/closeout, generation rollover, intent checkpoints |
 
 ## Next Task
 

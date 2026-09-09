@@ -35,7 +35,7 @@ conflicts-as-data flow must complete without reading source code.
 - P4.20: no transfer progress for large binaries — the beachhead's
   most-felt gap
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **16.1 Close the resolve loop** (complete, card 057): `resolve`
   accepts bundle ids and fetches on demand; `resolve apply` lands the

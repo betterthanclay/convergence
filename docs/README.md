@@ -7,10 +7,10 @@ Northstar-aligned documentation authority for Convergence.
 - `vision/`: long-horizon product direction and operating intent
 - `architecture/`: durable system model and invariants (canonical object model)
 - `contracts/`: explicit working and behavior contracts
-- `specs/`: active strict planning and ready-card execution control
+- `specs/`: active strict planning and ready-task execution control
 - `research/`: comparative systems research findings (dossiers, memos, tracks)
 - `rebuild/`: g01-era capture artifacts (lessons, TUI UX spec, salvage)
-- `roadmaps/`: segmented executable milestones and backlog
+- `roadmaps/`: executable Northstar tasks (`gNN.NNN`) and backlog
 - `logs/`: month-sharded execution history and decision/rationale records
 - `guides/`: task-shaped walkthroughs proven by tests
 - `git-podcast/`: origin rationale summary
@@ -21,10 +21,11 @@ research scaffolding, g01 roadmap files) are archived on branch `archive/g01`.
 
 ## Current state
 
-- Canonical roadmap execution now lives under `roadmaps/g02/`.
+- Canonical task execution now lives under `roadmaps/g02/`, one file per
+  Northstar task `g02.NNN`.
 - Historical decision records now live under `logs/YYYY-MM/`.
-- New roadmap work should use roadmap IDs such as `g02.001`.
-- New rationale records and implementation batch notes should go in `logs/YYYY-MM/`.
+- New tasks use task IDs such as `g02.032`.
+- New rationale records should go in `logs/YYYY-MM/`.
 
 ## Effigy-First Loop
 
@@ -48,8 +49,8 @@ uses `cargo nextest run -P ci`.
 
 ## Next Task
 
-Review the evidence-only `g02.031/102` installed Rust package canary. Its
-result does not authorize product repair. Product execution remains paused:
-`g02.027` awaits the operator's TUI cold-drive verdict, while `g02.022` batch
-22.5 has a built release pipeline but **no release cut**. Canonical queue:
-`roadmaps/g02/README.md`.
+The evidence-only `g02.031` installed Rust package canary merged (PR #4).
+Its result does not authorize product repair. Product execution remains
+paused: `g02.027` awaits the operator's TUI cold-drive verdict, while the
+`g02.022` release step has a built pipeline but **no release cut**.
+Canonical queue: `roadmaps/g02/README.md`.

@@ -13,7 +13,7 @@ beachhead teams keep their git history and tooling while Convergence owns
 the binary-heavy and gated workflows. Operator-confirmed first-class vision
 item (was archived g01 doc 11).
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **9.1 Interop architecture**: mapping contract (snap lineage <-> commits,
   bundles <-> merge commits, tombstones <-> deletions), boundary rules

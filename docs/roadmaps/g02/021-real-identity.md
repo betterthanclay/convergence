@@ -30,7 +30,7 @@ password that happens to be long.
 - `--token subject=value` startup flags remain the documented dev path
   and have no production counterpart
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **21.1 Token lifecycle** (complete, card 078): issued-at, expires-at,
   last-used, and a revocation triple; expiry and revocation enforced at

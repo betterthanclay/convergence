@@ -12,7 +12,7 @@ Updated: 2026-07-24
 GC was cut from the salvage with nothing server-side to replace it. This
 roadmap completes the verb surface and makes storage honest about retention.
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **8.1 Release channels**: named channels per repo; `release` op cuts a
   bundle to a channel (policy: which gates may release); client

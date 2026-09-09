@@ -11,7 +11,7 @@ Updated: 2026-07-24
 The slice's simplifications that won't survive scale, staged deliberately
 last because none of them change product semantics.
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **10.1 Canonical binary encoding**: manifests/records move from JSON to a
   canonical binary form with a stable hashing encoding; chunked manifests

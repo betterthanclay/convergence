@@ -35,7 +35,7 @@ These corrupt promoted history silently — worse than crashing.
 - L3: snap-id parent join not length-prefixed (latent canonicalization
   weakness)
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **13.1 Transactions** (complete, card 046): `MetaOp`/`apply_batch`
   with guard ops in both backends (SQLite `BEGIN IMMEDIATE`, Postgres

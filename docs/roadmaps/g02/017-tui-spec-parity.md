@@ -38,7 +38,7 @@ simplified.
   non-root views
 - Test gap: zero tests for the reducer despite pure-by-design
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **17.1 Missing views** (complete, card 061): Bundles, Releases,
   Lanes, Gates and Help views, each loading through one CLI verb on the

@@ -13,7 +13,7 @@ lanes stay in the vision and get built properly: the breadth/visibility
 partition that carries unpublished work between collaborators and gives
 superposition variants real provenance.
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **7.1 Lane model and registry**: server-side lane registry per repo
   (id, owner, members, visibility); lane ACLs wired into the capability

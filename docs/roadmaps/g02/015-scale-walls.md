@@ -27,7 +27,7 @@ and removes the unbounded surfaces.
   per tick and per keystroke command
 - GC cost = total live objects across the deployment per run
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **15.1 Merkle merge** (complete, card 053): sparse diff with
   identical-subtree pruning, path-walk lookups, and structural reuse on
