@@ -24,6 +24,9 @@
     (batch record 101, PR #3).
     Installed Rust package consumer canary (031) — complete as an independent
     evidence-only maintenance lane (batch record 102, PR #4).
+    Flattened-task switchover — complete (PR #5, merged
+    `bb978644962cddda8787f512b829fc54806273fa`); the active generation now
+    uses one task per file with no nested batch-card tree.
     Next task ID: `g02.032` if more g02 work is needed before rollover.
 
 - `g01`

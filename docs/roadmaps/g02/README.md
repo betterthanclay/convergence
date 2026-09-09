@@ -13,6 +13,7 @@ pointers into that history.
 `archive/g01`). `g02` carried the archive-and-rebuild boundary and the
 full rebuild improvement program through identity, ship readiness, gate
 administration, TUI usability, semver releases, and the candidate rename.
+The flattened-task switchover merged in PR #5 and did not add product work.
 
 ## Current State
 
@@ -36,6 +37,8 @@ Independent maintenance tasks:
 - **`g02.031` Northstar Rust package canary** — complete; the installed
   official package was proved against Convergence without authorizing
   product repair (batch record 102, PR #4)
+- **Flattened-task switchover** — complete; one task per file is now the
+  canonical `g02` execution model (PR #5)
 
 Product execution still waits on operator direction.
 
@@ -75,8 +78,8 @@ Product execution still waits on operator direction.
 
 ## Next Task
 
-Card 102 canary merged (PR #4); it does not change the product queue. The
-next product intent checkpoint is the operator's call among:
+The flattened-task switchover merged (PR #5); it does not change the product
+queue. The next product intent checkpoint is the operator's call among:
 
 1. **Audit follow-up** — promote a bounded set of retained findings into a
    new task (`g02.032` if still in this generation)

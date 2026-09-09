@@ -60,6 +60,6 @@ Before rollover:
 
 ## Next Task
 
-Card 102 canary merged (PR #4). Product direction remains TUI usability
-closeout (`g02.027`) or the operator-gated first release (`g02.022` release
-step). See `g02/README.md`.
+The flattened-task switchover merged in PR #5 and did not change the product
+queue. Product direction remains TUI usability closeout (`g02.027`) or the
+operator-gated first release (`g02.022` release step). See `g02/README.md`.

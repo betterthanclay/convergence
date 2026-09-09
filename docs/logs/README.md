@@ -11,7 +11,8 @@ Convergence logs capture timestamped execution history, rationale records, and t
 
 ## Current evidence window
 
-- `2026-09/` — installed Rust package canary planning, execution, and closeout
+- `2026-09/` — installed Rust package canary and flattened-task migration
+  planning, execution, review, merge, and closeout
 - `2026-08/` — northstar refresh, atlas horizon shaping, and the instruction /
   Rust quality audit lane through closeout
 - `2026-07/` — rebuild program closeout, audit hardening, secret substrate,
@@ -20,6 +21,7 @@ Convergence logs capture timestamped execution history, rationale records, and t
 
 ## Next Task
 
-Card 102 canary evidence (`2026-09/03-085115-installed-rust-package-canary.md`)
-merged with PR #4. Product closeout evidence for `g02.027` and `g02.022`
-still waits on the operator's TUI verdict and release authority.
+The flattened-task migration merged with PR #5 and is closed in
+`2026-09/09-150000-flattened-task-switchover-closeout.md`. Product closeout
+evidence for `g02.027` and `g02.022` still waits on the operator's TUI verdict
+and release authority.

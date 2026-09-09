@@ -4,7 +4,7 @@ title: "Flatten Northstar tasks and compact historic generations in convergence"
 handoff_mode: worker-pr-loop
 worker_mode: implementation
 dispatch_authority: orchestrator
-status: ready-to-launch
+status: closed
 base_required: pushed-main
 queue_dispatch: northstar-queue
 queue_approval: "The operator authorized Chatterbox on 2026-09-09 to orchestrate the flattened-task migration across projects without Orchestrator-tagged Paseo threads, and explicitly required Northstar Queue for dispatch."
@@ -118,3 +118,24 @@ retire only the queue-owned migration threads/workspace. Final report must give
 historic classifications, preservation manifest, old-to-new mapping, exact
 changes, validation/review evidence, retained exceptions, new frontier, and
 whether normal dispatch resumed.
+
+## Closeout
+
+- PR #5 merged the worker head `7fbc438d214ba90329ae0813d6b477f07c92fc74`
+  into `main` as `bb978644962cddda8787f512b829fc54806273fa`.
+- Accepted exact-head review is recorded in
+  [PR comment 5602607621](https://github.com/inflatable-cookie/convergence/pull/5#issuecomment-5602607621);
+  it reported no blocking findings.
+- The merged outcome is the documented one-task-per-file `g02` model, the
+  archived `g01` roll-up, removal of the named `g02/batch-cards/` tree, and
+  preserved open product commitments and retained historical exceptions.
+- The accepted review reports `effigy validate`, `effigy qa:docs`,
+  `effigy health`, and `git diff --check` clean at the reviewed head. The
+  closeout reran focused docs QA and diff checks on the merged main plus this
+  record.
+- No migration failure is deferred. Product direction remains at the existing
+  operator checkpoint: `g02.027` cold-drive verdict, `g02.022` release cut, or
+  a bounded audit follow-up (`g02.032` if promoted). `g02.024` and `g02.025`
+  remain parked on their triggers.
+- Canonical closeout evidence is recorded in
+  `docs/logs/2026-09/09-150000-flattened-task-switchover-closeout.md`.
