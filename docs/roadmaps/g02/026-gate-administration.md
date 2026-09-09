@@ -83,7 +83,7 @@ Three, taken from what the last two batches proved:
    existing upstream orphans nothing, and should not need ceremony. The
    care is for removal and re-parenting.
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **26.1 Graph model and impact analysis** (card 092): validation as a
   pure function — cycles, unknown upstreams, at least one entry gate,

@@ -18,11 +18,13 @@
     Workflow profiles (024) and edge/scale (025) — parked on triggers.
     Gate administration (026), TUI usability (027), semver releases
     (028), candidate rename (029) — 026, 028, 029 complete; 027 closing
-    (cards 096, 097, 100 complete; operator cold-drive verdict pending).
-    Northstar instruction and Rust quality audit (030) — complete.
+    (decision and guidance work complete, batch records 096, 097, 100;
+    operator cold-drive verdict pending).
+    Northstar instruction and Rust quality audit (030) — complete
+    (batch record 101, PR #3).
     Installed Rust package consumer canary (031) — complete as an independent
-    evidence-only maintenance lane; card 102.
-    Next roadmap ID: `g02.032` if more g02 work is needed before rollover.
+    evidence-only maintenance lane (batch record 102, PR #4).
+    Next task ID: `g02.032` if more g02 work is needed before rollover.
 
 - `g01`
   - Status: complete
@@ -46,10 +48,10 @@ Outcome: a trustworthy first release and closed usability debt from the
 rebuild.
 
 - Operator verdict on TUI cold-drive usability (`g02.027` closeout)
-- First tagged release (`g02.022` batch 22.5) when the operator authorises
-  the cut
+- First tagged release (the `g02.022` release step) when the operator
+  authorises the cut
 - Post-release redrive on the shipped surface (pattern from 22.4 / 27-28 logs)
-- Formal closeout of open g02 roadmaps before generation rollover
+- Formal closeout of open g02 tasks before generation rollover
 
 Unlocks: external operators can install without a toolchain; vocabulary frozen
 at candidate + semver.

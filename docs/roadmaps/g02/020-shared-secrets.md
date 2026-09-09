@@ -21,7 +21,7 @@ recipients — the substrate has to exist first.
   has to track that without pretending removal is revocation
   (doc 19 §6)
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **20.1 Multi-recipient secrets** (complete, card 074): `converge
   secret share|unshare`, sealing to every registered key of every

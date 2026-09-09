@@ -19,9 +19,10 @@ and leave one reviewable evidence-backed PR.
 - `docs/contracts/rust-quality-deviations.json`
 - Northstar's agent-instruction review and Rust explicit audit modes
 
-## Runway
+## Execution record
 
-- [`batch-cards/101-northstar-agents-and-rust-audit.md`](./batch-cards/101-northstar-agents-and-rust-audit.md) — complete
+Batch card 101 (complete; full text in git history before the
+flattened-task migration). Outcome below.
 
 ## Boundaries
 

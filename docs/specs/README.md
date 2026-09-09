@@ -11,9 +11,9 @@ repo needs tighter execution grammar than the roadmap alone provides.
 - promote durable rules into architecture or contracts
 - keep `docs/specs/` mostly limited to active or still-useful planning
 - archive or remove stale specs once the durable outcome is carried elsewhere
-- before roadmap generation rollover, purge stale generation-specific specs and
-  batch cards from the active tree so the next generation does not inherit dead
-  planning debris
+- before roadmap generation rollover, purge stale generation-specific specs
+  and superseded task records from the active tree so the next generation
+  does not inherit dead planning debris
 
 ## Active Spec Set
 
@@ -24,5 +24,5 @@ Archived specs live in [`archive/`](./archive/).
 ## Next Task
 
 No active spec. Archived specs live in [`archive/`](./archive/). Queue
-authority is the active `g02` roadmaps and batch cards under
+authority is the active `g02` Northstar tasks under
 `docs/roadmaps/g02/`.

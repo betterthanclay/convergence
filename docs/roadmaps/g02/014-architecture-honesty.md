@@ -31,7 +31,7 @@ so the docs are true again.
   equality only
 - Events table grows forever; nothing prunes it
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **14.1 Doc 14 reconciliation** (complete, card 050): doc 14 §0 states
   the shipped single-process server, per-section `**Deferred**` markers

@@ -30,7 +30,7 @@ in the audit program matters while they stand.
   from the `Capability` enum; snap upload and lane-head push gate on
   `Publish` instead
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **11.1 Read authorization** (complete, card 038): repo-scoped object
   and negotiate routes with an object→repo association recorded on

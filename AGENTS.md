@@ -73,7 +73,7 @@ will consume the output. Direct commands only for what `effigy.toml` misses.
 - `effigy qa:docs` — docs and planning surfaces (required when docs change)
 
 Done means the suite passes, the docs that govern the change say what it now
-does, and the card and roadmap agree about what is left.
+does, and the task and roadmap agree about what is left.
 
 ## References
 
@@ -81,7 +81,7 @@ does, and the card and roadmap agree about what is left.
 - `docs/vision/001-convergence-platform-vision.md` — why the project exists
 - `docs/architecture/README.md` — the object model, gates, and invariants
 - `docs/roadmaps/g02/README.md` — the live queue and what is parked
-- `docs/specs/README.md` — active strict planning and ready cards
+- `docs/specs/README.md` — active strict planning and ready tasks
 - `docs/logs/README.md` — what was done, and the reasoning at the time
 - `docs/contracts/001-working-rules.md` — how work starts, closes, and continues
 - `docs/contracts/contract-index.md` — every other contract in force
@@ -90,8 +90,8 @@ does, and the card and roadmap agree about what is left.
 
 - In the active strict lane, `continue` should resolve through the previous
   `Next Task`.
-- If there is an active ready batch card, execution should anchor on that card.
-- If there is no ready card, stop in planning instead of improvising execution.
+- If there is an active ready Northstar task, execution should anchor on that task.
+- If there is no ready task, stop in planning instead of improvising execution.
 - When the next move is materially ambiguous, ask for intent instead of
   guessing.
 

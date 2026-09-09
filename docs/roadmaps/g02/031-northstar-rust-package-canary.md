@@ -18,12 +18,12 @@ policy, evidence meaning, product code, or existing validation boundary.
 - `docs/contracts/rust-quality-profile.json`
 - `docs/contracts/rust-quality-deviations.json`
 - Northstar contract 004 and spec 034 at registry version `1.4.0`
-- [`batch-cards/102-installed-rust-package-canary.md`](./batch-cards/102-installed-rust-package-canary.md)
 
-## Runway
+## Execution record
 
-- Card 102 only: install, route, exercise both workflows, preserve consumer
-  authority, record evidence, and stop for review.
+Batch card 102 only (complete; full text in git history before the
+flattened-task migration): install, route, exercise both workflows, preserve
+consumer authority, record evidence, and stop for review. Outcome below.
 
 ## Boundaries
 

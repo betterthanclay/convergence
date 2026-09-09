@@ -1,6 +1,11 @@
-# g02 Roadmaps
+# g02 Tasks
 
-`g02` is the active roadmap generation for Convergence (closing posture).
+`g02` is the active Northstar task generation for Convergence (closing
+posture). Each `NNN-<slug>.md` file below is one Northstar task `g02.NNN` —
+the sole executable planning unit. Per-batch execution cards (001–102)
+were absorbed into their owning tasks during the flattened-task migration;
+full card text remains in git history, and inline `(card NNN)` notes are
+pointers into that history.
 
 ## Context
 
@@ -11,29 +16,30 @@ administration, TUI usability, semver releases, and the candidate rename.
 
 ## Current State
 
-Programs complete through `g02.029` (candidate rename). Open lanes:
+Programs complete through `g02.029` (candidate rename). Open tasks:
 
-- **`g02.022` ship readiness** — 22.1–22.4 complete; batch 22.5 (card 091)
+- **`g02.022` ship readiness** — 22.1–22.4 complete; the 22.5 release step
   has a built release pipeline but **no release cut** (operator-gated)
-- **`g02.027` TUI usability** — cards 096 (frame/navigation), 097 (guidance),
-  100 (decisions on screen) complete; operator cold-drive verdict pending
-  before formal closeout. Root redesign and semver tile work landed early
-  during 27.3/28.
+- **`g02.027` TUI usability** — frame/navigation, guidance, and
+  decisions-on-screen work complete (batch records 096, 097, 100);
+  operator cold-drive verdict pending before formal closeout. Root redesign
+  and semver tile work landed early during 27.3/28.
 
 Parked on triggers: `g02.024` workflow profiles, `g02.025` edge/scale.
 
-Independent maintenance lane:
+Independent maintenance tasks:
 
 - **`g02.030` Northstar instruction and Rust quality audit** — complete;
-  card 101 delivered the repository-scope Rust audit and the AGENTS rewrite,
-  and its retained findings return to the orchestrator
-- **`g02.031` Northstar Rust package canary** — complete; card 102 proved the
-  installed official package against Convergence without authorizing product
-  repair
+  the repository-scope Rust audit and the AGENTS rewrite are delivered
+  (batch record 101, PR #3), and its retained findings return to the
+  orchestrator
+- **`g02.031` Northstar Rust package canary** — complete; the installed
+  official package was proved against Convergence without authorizing
+  product repair (batch record 102, PR #4)
 
 Product execution still waits on operator direction.
 
-## Lanes
+## Tasks
 
 - [`001-post-research-execution-planning-gate.md`](./001-post-research-execution-planning-gate.md) — complete
 - [`002-archive-and-rebuild-boundary.md`](./002-archive-and-rebuild-boundary.md) — complete
@@ -61,23 +67,23 @@ Product execution still waits on operator direction.
 - [`024-workflow-profiles.md`](./024-workflow-profiles.md) — parked (needs a design partner)
 - [`025-edge-and-scale.md`](./025-edge-and-scale.md) — parked (needs a measured ceiling)
 - [`026-gate-administration.md`](./026-gate-administration.md) — complete
-- [`027-tui-usability.md`](./027-tui-usability.md) — closing (096, 097, 100 complete)
+- [`027-tui-usability.md`](./027-tui-usability.md) — closing (096, 097, 100 complete; operator verdict pending)
 - [`028-semver-releases.md`](./028-semver-releases.md) — complete
 - [`029-candidate-rename.md`](./029-candidate-rename.md) — complete
-- [`030-northstar-instruction-and-rust-quality-audit.md`](./030-northstar-instruction-and-rust-quality-audit.md) — complete (card 101 delivered)
-- [`031-northstar-rust-package-canary.md`](./031-northstar-rust-package-canary.md) — complete (card 102)
+- [`030-northstar-instruction-and-rust-quality-audit.md`](./030-northstar-instruction-and-rust-quality-audit.md) — complete (batch record 101, PR #3)
+- [`031-northstar-rust-package-canary.md`](./031-northstar-rust-package-canary.md) — complete (batch record 102, PR #4)
 
 ## Next Task
 
-Review the completed card 102 canary. It does not change the product queue.
-After its review, the next product intent checkpoint remains one of:
+Card 102 canary merged (PR #4); it does not change the product queue. The
+next product intent checkpoint is the operator's call among:
 
-1. **Audit follow-up** — promote a bounded set of retained findings into a new
-   repair card
-2. **TUI closeout** — cold-drive verdict on `g02.027`; close the roadmap if
+1. **Audit follow-up** — promote a bounded set of retained findings into a
+   new task (`g02.032` if still in this generation)
+2. **TUI closeout** — cold-drive verdict on `g02.027`; close the task if
    exit criteria are met
-3. **First release** — push tag and cut release via `g02.022` batch 22.5 when
-   the operator authorises it
+3. **First release** — push tag and cut release via the `g02.022` release
+   step when the operator authorises it
 
 Long-horizon sequencing: `generation-index.md` strategic horizons (atlas,
 2026-08-17). Do not open `g03` until g02 rollover closeout is complete.

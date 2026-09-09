@@ -1,6 +1,6 @@
 # Logs
 
-Convergence logs capture timestamped execution history, rationale records, and milestone closeout evidence.
+Convergence logs capture timestamped execution history, rationale records, and task closeout evidence.
 
 ## Rules
 
@@ -20,7 +20,6 @@ Convergence logs capture timestamped execution history, rationale records, and m
 
 ## Next Task
 
-Review the completed card 102 canary evidence from
-`2026-09/03-085115-installed-rust-package-canary.md`. Product closeout
-evidence for `g02.027` and `g02.022` still waits on the operator's TUI verdict
-and release authority.
+Card 102 canary evidence (`2026-09/03-085115-installed-rust-package-canary.md`)
+merged with PR #4. Product closeout evidence for `g02.027` and `g02.022`
+still waits on the operator's TUI verdict and release authority.

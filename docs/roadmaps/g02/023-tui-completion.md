@@ -40,7 +40,7 @@ how a product accumulates surfaces that each made sense alone.
 - Superpositions is a flat list; the spec's 65/35 list+detail split
   would show variant content rather than a summary line
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **23.1 Reality check and simplification sweep** (complete, card 082):
   drove the real binaries against a real server through a pty. Nine

@@ -36,7 +36,7 @@ closes every audited loss path.
 - R1: `write_atomic` never fsyncs — power loss can zero state files
 - R2: `read_config` writes as a side effect on the hot path
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **12.1 Safe restore** (complete, card 042): `materialize_via_temp`
   defers destruction until the tree fully materializes; materialize

@@ -52,7 +52,7 @@ does not run until the operator says so.
 - no way to stand up a throwaway local deployment to exercise the thing
   end to end without hand-assembling one each time
 
-## Execution Plan (batch details in cards)
+## Execution Plan
 
 - **22.1 Local diagnosis and install** (complete, card 087): `converge doctor`
   reporting workspace, remote, identity, key, server reachability and
@@ -75,10 +75,23 @@ does not run until the operator says so.
   work, and no test suite had seen any of them. The verdict on the card:
   ready for others with one stated limit — `promote` is unreachable
   until the gate graph can be changed (finding 33)
-- **22.5 Release** (card 091, **gated**): tagged release workflow,
-  binaries for macOS and Linux, checksums, one-command install. Does not
-  start until the operator says the shakedown is done. Touches
-  `.github/workflows/`, which needs an explicit instruction anyway
+- **22.5 Release** (**gated**: pipeline built, **no release cut**):
+  tag-triggered workflow building macOS and Linux binaries with checksums
+  (`SHA256SUMS` published with `gh`, no third-party action), one-command
+  install via `scripts/install.sh` (verifies the checksum before installing
+  anything), a `check-version` job refusing tags that disagree with the
+  workspace version, `workflow_dispatch` with `dry_run` so the pipeline is
+  provable without publishing, and `docs/guides/005-releasing.md` (cutting,
+  verifying, installing, bad-release procedure). Proven as far as a laptop
+  allows: both macOS targets built and run, `actionlint`/`shellcheck`
+  clean, install reproduced end to end over HTTP including refusal of a
+  corrupted archive. **Not verified**: `x86_64-unknown-linux-gnu` build and
+  the `SHA256SUMS` merge across three uploads — the end-to-end dry run
+  still waits on Actions minutes. Gate state (2026-07-27): the operator
+  authorised the pipeline and the `.github/workflows/` edit; cutting a
+  release (tag push, publishing artifacts) still waits for a separate word.
+  Full batch record: card 091 in git history before the flattened-task
+  migration.
 
 ## Exit Criteria
 
@@ -94,5 +107,8 @@ does not run until the operator says so.
 
 ## Next Task
 
-Batch card 22.5 (release) when the operator authorises the cut. Pipeline
-built; `g02.026` gate administration is complete.
+Operator-gated release cut under this task: push a tag, one
+`workflow_dispatch` dry run when minutes allow (chiefly the Linux build and
+the `SHA256SUMS` merge), and `docs/releases/vX.Y.Z.md` for the first release
+body. `g02.026` gate administration is complete, so `22.5` is the
+operator's call again.
