@@ -4,7 +4,7 @@ title: "Retire the roadmap backlog in convergence"
 handoff_mode: worker-pr-loop
 worker_mode: implementation
 dispatch_authority: orchestrator
-status: ready-to-launch
+status: closed
 base_required: pushed-main
 queue_dispatch: northstar-queue
 queue_approval: "The operator authorized Chatterbox on 2026-09-09 to roll out the roadmap-backlog retirement across projects without Orchestrator-owned Paseo threads, using Northstar Queue."
@@ -108,3 +108,25 @@ closeout evidence, and retire only its own cleanup threads/workspace. Final
 report must include the disposition manifest, exact files changed/deleted,
 validation and review evidence, retained historical exceptions, and current
 approved frontier.
+
+## Closeout
+
+- PR #6 merged the worker head `b21a6f0ad7090532d21918f3b7ced7ef1a5a3ec8`
+  into `main` as `8eb961d56b8b9e91e11cebafdd14ad9659598db1`.
+- Accepted exact-head review is recorded in
+  [PR comment 5603604471](https://github.com/inflatable-cookie/convergence/pull/6#issuecomment-5603604471);
+  it reported no blocking findings.
+- The merged outcome is the retired `docs/roadmaps/backlog/` surface, the
+  8-item disposition manifest in
+  `docs/triage/20260909-roadmap-backlog-retirement.md`, rewritten front
+  doors, doctrine, and architecture deferrals naming triage, and preserved
+  historical exceptions.
+- The accepted review reports `git diff --check`, `effigy docs check links`,
+  and `effigy qa:docs` clean at the reviewed head. The closeout reran those
+  plus `effigy health` on the merged main.
+- No retirement failure is deferred. Product direction remains at the existing
+  operator checkpoint: `g02.027` cold-drive verdict, `g02.022` release cut, or
+  a bounded audit follow-up (`g02.032` if promoted). `g02.024` and `g02.025`
+  remain parked on their triggers.
+- Canonical closeout evidence is recorded in
+  `docs/logs/2026-09/09-154500-roadmap-backlog-retirement-closeout.md`.

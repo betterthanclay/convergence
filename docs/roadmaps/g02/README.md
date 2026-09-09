@@ -13,7 +13,8 @@ pointers into that history.
 `archive/g01`). `g02` carried the archive-and-rebuild boundary and the
 full rebuild improvement program through identity, ship readiness, gate
 administration, TUI usability, semver releases, and the candidate rename.
-The flattened-task switchover merged in PR #5 and did not add product work.
+The flattened-task switchover merged in PR #5 and the roadmap-backlog
+retirement merged in PR #6; neither added product work.
 
 ## Current State
 
@@ -78,8 +79,9 @@ Product execution still waits on operator direction.
 
 ## Next Task
 
-The flattened-task switchover merged (PR #5); it does not change the product
-queue. The next product intent checkpoint is the operator's call among:
+The flattened-task switchover (PR #5) and roadmap-backlog retirement (PR #6)
+are merged; neither changes the product queue. The next product intent
+checkpoint is the operator's call among:
 
 1. **Audit follow-up** — promote a bounded set of retained findings into a
    new task (`g02.032` if still in this generation)
